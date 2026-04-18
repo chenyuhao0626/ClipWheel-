@@ -67,11 +67,11 @@ python scripts\generate-brand-assets.py
 
 ## 项目网站
 网站入口：
-- [website/index.html](C:/Users/Administrator/Projects/clipwheel/website/index.html)
+- [[website/index.html](C:/Users/Administrator/Projects/clipwheel/website/index.html)](https://chenyuhao0626.github.io/ClipWheel-/)
 
 本地预览（任选其一）：
 1. 直接双击打开 `website/index.html`
-2. 用静态服务器启动目录 `website/`（推荐）
+2. 用静态服务器启动目录 [`website/`](https://chenyuhao0626.github.io/ClipWheel-/)（推荐）
 
 ClipWheel 是一个聚焦中文办公与开发场景的轮盘式剪贴板效率工具。它把“复制-切换窗口-粘贴”的碎片动作整合为一次热键呼出与鼠标方向选择：按住热键调出轮盘，滑向目标内容，松开即可完成回填，并可按配置自动执行粘贴。应用在后台实时记录剪贴板历史，支持固定常用文本、清理历史、快速复制、托盘常驻与热键自定义，让高频输入时的上下文切换更少、误操作更少、节奏更连贯。相较传统列表式剪贴板管理器，ClipWheel 更强调低认知负担和“肌肉记忆化”交互，适合文案编辑、客服话术、开发调试、运营回复等需要反复粘贴与快速切换文本的用户。
 
