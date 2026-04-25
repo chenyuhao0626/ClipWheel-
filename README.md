@@ -1,4 +1,4 @@
-# ClipWheel
+# ClipWheel/轮盘剪贴板
 
 ClipWheel 是一个面向 Windows 桌面的轮盘式剪贴板效率工具，支持热键呼出、历史管理、固定常用内容、自动粘贴与托盘常驻。
 
