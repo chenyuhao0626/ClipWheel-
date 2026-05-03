@@ -291,186 +291,174 @@ void apply_selection_to_target(void) {
 
 /* ─── Overlay wheel ────────────────────────────────────────────────────────── */
 
+static const double WHEEL_PI = 3.14159265358979323846;
+
 static const COLORREF kSectorPalette[NSECT] = {
     RGB(91, 140, 250), RGB(131, 108, 245), RGB(154, 127, 255), RGB(76, 189, 201),
     RGB(71, 162, 255), RGB(105, 136, 249), RGB(121, 93, 236), RGB(88, 196, 161)
 };
 
-void draw_wheel(HDC hdc, int w, int h) {
+static void wheel_origin(HDC hdc, int w, int h, int *cx, int *cy) {
     RECT rc = {0, 0, w, h};
-    RECT wheel_rc, center_card, brand_rect, hint_rect;
-    int cx, cy;
-    int old_mode, outer_r, inner_r, card_w, card_h;
-    float appear = ease_out_backf(g_wheel_appear);
-    float t_text = ease_out_cubicf(g_wheel_appear);
-    wchar_t preview[CW_MAX_CHARS];
-    const double pi = 3.14159265358979323846;
-    double step = 2.0 * pi / (double)NSECT;
-
-    /* CRITICAL: Clear any existing clipping region from the HDC immediately.
-       In Floating Mode or during certain OS-triggered partial repaints, the HDC
-       may carry a stale clipping region that cuts off sectors (like the bottom-left). */
     SelectClipRgn(hdc, NULL);
-
     if (g_floating_mode) {
-        cx = w / 2;
-        cy = h / 2;
-    } else {
-        cx = g_wheel_center_screen.x - g_overlay_vx;
-        cy = g_wheel_center_screen.y - g_overlay_vy;
-        if (cx <= 0 || cx >= w || cy <= 0 || cy >= h) { cx = w / 2; cy = h / 2; }
-    }
-
-    outer_r = (int)(OUTER_R * (0.6f + 0.4f * appear));
-    inner_r = (int)(INNER_R * (0.6f + 0.4f * appear));
-
-    if (g_floating_mode) {
+        *cx = w / 2; *cy = h / 2;
         HBRUSH key_br = CreateSolidBrush(OVERLAY_KEY_COLOR);
         FillRect(hdc, &rc, key_br);
         DeleteObject(key_br);
     } else {
+        *cx = g_wheel_center_screen.x - g_overlay_vx;
+        *cy = g_wheel_center_screen.y - g_overlay_vy;
+        if (*cx <= 0 || *cx >= w || *cy <= 0 || *cy >= h) { *cx = w / 2; *cy = h / 2; }
         fill_vertical_gradient(hdc, &rc, RGB(7, 8, 14), RGB(10, 10, 14));
     }
+}
 
-    old_mode = SetBkMode(hdc, TRANSPARENT);
-
-    /* 1. Draw Outer Glow Rings */
-    {
-        int s1 = SaveDC(hdc);
-        for (int i = 4; i >= 1; --i) {
-            int r = outer_r + i * 18;
-            COLORREF glow = mix_color(COL_ACCENT_GLOW, COL_BG_DEEP, 0.55f + (float)i * 0.1f);
-            HPEN p = CreatePen(PS_SOLID, 2, glow);
-            HGDIOBJ op = SelectObject(hdc, p);
-            HGDIOBJ ob = SelectObject(hdc, GetStockObject(NULL_BRUSH));
-            Ellipse(hdc, cx - r, cy - r, cx + r, cy + r);
-            SelectObject(hdc, op); SelectObject(hdc, ob);
-            DeleteObject(p);
-        }
-        RestoreDC(hdc, s1);
+static void draw_glow_rings(HDC hdc, int cx, int cy, int outer_r) {
+    int s1 = SaveDC(hdc);
+    for (int i = 4; i >= 1; --i) {
+        int r = outer_r + i * 18;
+        COLORREF glow = mix_color(COL_ACCENT_GLOW, COL_BG_DEEP, 0.55f + (float)i * 0.1f);
+        HPEN p = CreatePen(PS_SOLID, 2, glow);
+        HGDIOBJ op = SelectObject(hdc, p);
+        HGDIOBJ ob = SelectObject(hdc, GetStockObject(NULL_BRUSH));
+        Ellipse(hdc, cx - r, cy - r, cx + r, cy + r);
+        SelectObject(hdc, op); SelectObject(hdc, ob);
+        DeleteObject(p);
     }
+    RestoreDC(hdc, s1);
+}
 
-    /* 2. Draw Wheel Base Circle */
-    wheel_rc.left = cx - outer_r; wheel_rc.top = cy - outer_r;
-    wheel_rc.right = cx + outer_r; wheel_rc.bottom = cy + outer_r;
-    fill_round_gradient(hdc, &wheel_rc, RGB(28, 30, 40), RGB(16, 17, 25), outer_r);
-    draw_round_border(hdc, &wheel_rc, mix_color(COL_WHEEL_BORDER, COL_ACCENT_HOVER, 0.35f), outer_r, 2);
+static void draw_wheel_base(HDC hdc, int cx, int cy, int outer_r) {
+    RECT wr = {cx - outer_r, cy - outer_r, cx + outer_r, cy + outer_r};
+    fill_round_gradient(hdc, &wr, RGB(28, 30, 40), RGB(16, 17, 25), outer_r);
+    draw_round_border(hdc, &wr, mix_color(COL_WHEEL_BORDER, COL_ACCENT_HOVER, 0.35f), outer_r, 2);
+}
 
-    /* 3. Draw Sectors (Pie) - Use a fresh clip state */
-    {
-        int s2 = SaveDC(hdc);
-        SelectClipRgn(hdc, NULL); /* Force clear before Pie loop */
-        for (int i = 0; i < NSECT; ++i) {
-            int slot = sector_to_slot(i);
-            int active = (slot >= 0 && slot < g_slot_count);
-            float heat = g_sector_heat[i];
-            COLORREF base = kSectorPalette[i];
-            COLORREF fill, border;
-            
-            /* Enhanced color mixing: ensure min brightness */
-            if (i == 4) {
-                fill = mix_color(RGB(100, 30, 30), RGB(220, 50, 50), 0.30f + heat * 0.55f);
-            } else {
-                fill = active ? mix_color(mix_color(COL_WHEEL_SECTOR, base, 0.25f), base, 0.40f + heat * 0.50f)
-                              : mix_color(RGB(32, 34, 46), RGB(24, 26, 36), 0.5f);
-            }
-            border = mix_color(COL_WHEEL_BORDER, COL_ACCENT_GLOW, heat * 0.75f);
-            if (i == 4) border = mix_color(RGB(180, 50, 50), RGB(255, 120, 120), heat * 0.75f);
-
-            HBRUSH br = CreateSolidBrush(fill);
-            HPEN pen = CreatePen(PS_SOLID, (active || i == 4) ? 1 : 0, border);
-            HGDIOBJ ob = SelectObject(hdc, br);
-            HGDIOBJ op = SelectObject(hdc, pen);
-            double t0 = -pi / 2.0 + i * step - step / 2.0;
-            double t1 = t0 + step;
-            Pie(hdc, cx - outer_r, cy - outer_r, cx + outer_r, cy + outer_r,
-                cx + (int)(outer_r * cos(t0)), cy - (int)(outer_r * sin(t0)),
-                cx + (int)(outer_r * cos(t1)), cy - (int)(outer_r * sin(t1)));
-            SelectObject(hdc, ob); SelectObject(hdc, op);
-            DeleteObject(br); DeleteObject(pen);
-        }
-        RestoreDC(hdc, s2);
+static void draw_wheel_sectors(HDC hdc, int cx, int cy, int outer_r, double step) {
+    int s2 = SaveDC(hdc);
+    SelectClipRgn(hdc, NULL);
+    for (int i = 0; i < NSECT; ++i) {
+        int slot = sector_to_slot(i);
+        int active = (slot >= 0 && slot < g_slot_count);
+        float heat = g_sector_heat[i];
+        COLORREF base = kSectorPalette[i];
+        COLORREF fill = (i == 4)
+            ? mix_color(RGB(100, 30, 30), RGB(220, 50, 50), 0.30f + heat * 0.55f)
+            : active
+                ? mix_color(mix_color(COL_WHEEL_SECTOR, base, 0.25f), base, 0.40f + heat * 0.50f)
+                : mix_color(RGB(32, 34, 46), RGB(24, 26, 36), 0.5f);
+        COLORREF border = (i == 4)
+            ? mix_color(RGB(180, 50, 50), RGB(255, 120, 120), heat * 0.75f)
+            : mix_color(COL_WHEEL_BORDER, COL_ACCENT_GLOW, heat * 0.75f);
+        HBRUSH br = CreateSolidBrush(fill);
+        HPEN pen = CreatePen(PS_SOLID, (active || i == 4) ? 1 : 0, border);
+        HGDIOBJ obr = SelectObject(hdc, br);
+        HGDIOBJ opn = SelectObject(hdc, pen);
+        double t0 = -WHEEL_PI / 2.0 + i * step - step / 2.0;
+        double t1 = t0 + step;
+        Pie(hdc, cx - outer_r, cy - outer_r, cx + outer_r, cy + outer_r,
+            cx + (int)(outer_r * cos(t0)), cy - (int)(outer_r * sin(t0)),
+            cx + (int)(outer_r * cos(t1)), cy - (int)(outer_r * sin(t1)));
+        SelectObject(hdc, obr); SelectObject(hdc, opn);
+        DeleteObject(br); DeleteObject(pen);
     }
+    RestoreDC(hdc, s2);
+}
 
-    /* 4. Draw Inner Hub and Center Card */
-    {
-        int s3 = SaveDC(hdc);
-        RECT hub = {cx - inner_r, cy - inner_r, cx + inner_r, cy + inner_r};
-        fill_round_gradient(hdc, &hub, RGB(36, 38, 52), RGB(23, 24, 34), inner_r);
-        draw_round_border(hdc, &hub, mix_color(COL_ACCENT, COL_ACCENT_GLOW, 0.35f), inner_r, 2);
+static void draw_wheel_hub(HDC hdc, int cx, int cy, int inner_r, float appear, float t_text) {
+    int s3 = SaveDC(hdc);
+    RECT hub = {cx - inner_r, cy - inner_r, cx + inner_r, cy + inner_r};
+    fill_round_gradient(hdc, &hub, RGB(36, 38, 52), RGB(23, 24, 34), inner_r);
+    draw_round_border(hdc, &hub, mix_color(COL_ACCENT, COL_ACCENT_GLOW, 0.35f), inner_r, 2);
 
-        card_w = (int)(360.0f * (0.6f + 0.4f * appear));
-        card_h = (int)(122.0f * (0.6f + 0.4f * appear));
-        center_card.left = cx - card_w / 2; center_card.top = cy - card_h / 2;
-        center_card.right = center_card.left + card_w;
-        center_card.bottom = center_card.top + card_h;
-        fill_round_gradient(hdc, &center_card, RGB(33, 35, 48), RGB(22, 24, 33), 24);
-        draw_round_border(hdc, &center_card, mix_color(COL_ACCENT, COL_ACCENT_GLOW, 0.45f), 24, 2);
+    int card_w = (int)(360.0f * (0.6f + 0.4f * appear));
+    int card_h = (int)(122.0f * (0.6f + 0.4f * appear));
+    RECT ccard = {cx - card_w / 2, cy - card_h / 2, cx + card_w / 2, cy + card_h / 2};
+    fill_round_gradient(hdc, &ccard, RGB(33, 35, 48), RGB(22, 24, 33), 24);
+    draw_round_border(hdc, &ccard, mix_color(COL_ACCENT, COL_ACCENT_GLOW, 0.45f), 24, 2);
 
-        SelectObject(hdc, g_font_body);
-        SetTextColor(hdc, mix_color(COL_TEXT_SECONDARY, COL_TEXT_PRIMARY, 0.35f + 0.65f * t_text));
-        if (g_sel == 4) {
-            SetTextColor(hdc, RGB(255, 120, 120));
-            DrawTextW(hdc, L"松开取消", -1, &center_card, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    SelectObject(hdc, g_font_body);
+    SetTextColor(hdc, mix_color(COL_TEXT_SECONDARY, COL_TEXT_PRIMARY, 0.35f + 0.65f * t_text));
+    if (g_sel == 4) {
+        SetTextColor(hdc, RGB(255, 120, 120));
+        DrawTextW(hdc, L"松开取消", -1, &ccard, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    } else {
+        int sel_slot = sector_to_slot(g_sel);
+        if (g_slot_count == 0) {
+            DrawTextW(hdc, L"还没有可用内容", -1, &ccard, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        } else if (sel_slot >= 0 && sel_slot < g_slot_count) {
+            wchar_t preview[CW_MAX_CHARS];
+            truncate_preview(preview, ARRAYSIZE(preview), g_slots[sel_slot], 88);
+            DrawTextW(hdc, preview, -1, &ccard, DT_CENTER | DT_VCENTER | DT_WORDBREAK | DT_NOPREFIX);
         } else {
-            int sel_slot = sector_to_slot(g_sel);
-            if (g_slot_count == 0) {
-                DrawTextW(hdc, L"还没有可用内容", -1, &center_card, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-            } else if (sel_slot >= 0 && sel_slot < g_slot_count) {
-                truncate_preview(preview, ARRAYSIZE(preview), g_slots[sel_slot], 88);
-                DrawTextW(hdc, preview, -1, &center_card, DT_CENTER | DT_VCENTER | DT_WORDBREAK | DT_NOPREFIX);
-            } else {
-                DrawTextW(hdc, L"移动鼠标选择，松开热键粘贴", -1, &center_card, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-            }
+            DrawTextW(hdc, L"移动鼠标选择，松开热键粘贴", -1, &ccard, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         }
-        RestoreDC(hdc, s3);
     }
+    RestoreDC(hdc, s3);
+}
 
-    /* 5. Draw Labels and Branding */
-    {
-        int s4 = SaveDC(hdc);
-        SelectObject(hdc, g_font_caption);
-        for (int i = 0; i < NSECT; ++i) {
-            int slot = sector_to_slot(i);
-            double mid = -pi / 2.0 + i * step;
-            int mx = cx + (int)((inner_r + 96) * cos(mid));
-            int my = cy - (int)((inner_r + 96) * sin(mid));
-            RECT label_rc = {mx - 78, my - 16, mx + 78, my + 16};
-            if (i == 4) {
-                SetTextColor(hdc, mix_color(RGB(200, 80, 80), RGB(255, 130, 130), g_sector_heat[i]));
-                DrawTextW(hdc, L"\u2715 \u53d6\u6d88", -1, &label_rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
-            } else if (slot >= 0 && slot < g_slot_count) {
-                truncate_preview(preview, ARRAYSIZE(preview), g_slots[slot], 26);
-                if (i == g_sel) {
-                    RECT chip = {mx - 72, my - 14, mx + 72, my + 14};
-                    fill_round_gradient(hdc, &chip, RGB(102, 112, 250), RGB(84, 95, 232), 12);
-                    draw_round_border(hdc, &chip, COL_ACCENT_GLOW, 12, 1);
-                    SetTextColor(hdc, COL_WHITE);
-                } else {
-                    SetTextColor(hdc, mix_color(COL_TEXT_TERTIARY, COL_TEXT_SECONDARY, 0.45f + 0.55f * g_sector_heat[i]));
-                }
-                DrawTextW(hdc, preview, -1, &label_rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+static void draw_wheel_labels(HDC hdc, int cx, int cy, int outer_r, int inner_r,
+                              double step, float t_text) {
+    int s4 = SaveDC(hdc);
+    SelectObject(hdc, g_font_caption);
+    for (int i = 0; i < NSECT; ++i) {
+        int slot = sector_to_slot(i);
+        double mid = -WHEEL_PI / 2.0 + i * step;
+        int mx = cx + (int)((inner_r + 96) * cos(mid));
+        int my = cy - (int)((inner_r + 96) * sin(mid));
+        RECT lr = {mx - 78, my - 16, mx + 78, my + 16};
+        if (i == 4) {
+            SetTextColor(hdc, mix_color(RGB(200, 80, 80), RGB(255, 130, 130), g_sector_heat[i]));
+            DrawTextW(hdc, L"\u2715 \u53d6\u6d88", -1, &lr, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+        } else if (slot >= 0 && slot < g_slot_count) {
+            wchar_t prev[64];
+            truncate_preview(prev, ARRAYSIZE(prev), g_slots[slot], 26);
+            if (i == g_sel) {
+                RECT chip = {mx - 72, my - 14, mx + 72, my + 14};
+                fill_round_gradient(hdc, &chip, RGB(102, 112, 250), RGB(84, 95, 232), 12);
+                draw_round_border(hdc, &chip, COL_ACCENT_GLOW, 12, 1);
+                SetTextColor(hdc, COL_WHITE);
+            } else {
+                SetTextColor(hdc, mix_color(COL_TEXT_TERTIARY, COL_TEXT_SECONDARY, 0.45f + 0.55f * g_sector_heat[i]));
             }
+            DrawTextW(hdc, prev, -1, &lr, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
         }
-
-        brand_rect.left = cx - 128; brand_rect.top = cy - outer_r - 72;
-        brand_rect.right = cx + 128; brand_rect.bottom = cy - outer_r - 30;
-        fill_round_gradient(hdc, &brand_rect, RGB(33, 34, 47), RGB(21, 22, 30), 14);
-        draw_round_border(hdc, &brand_rect, mix_color(COL_ACCENT, COL_ACCENT_GLOW, 0.40f), 14, 1);
+    }
+    {
+        RECT br = {cx - 128, cy - outer_r - 72, cx + 128, cy - outer_r - 30};
+        fill_round_gradient(hdc, &br, RGB(33, 34, 47), RGB(21, 22, 30), 14);
+        draw_round_border(hdc, &br, mix_color(COL_ACCENT, COL_ACCENT_GLOW, 0.40f), 14, 1);
         SetTextColor(hdc, mix_color(COL_ACCENT_GLOW, COL_WHITE, 0.35f));
         SelectObject(hdc, g_font_title);
-        DrawTextW(hdc, L"ClipWheel", -1, &brand_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-
-        hint_rect.left = cx - 180; hint_rect.top = cy + outer_r + 24;
-        hint_rect.right = cx + 180; hint_rect.bottom = cy + outer_r + 52;
-        /* For the hint text, ensure the text background is rendered nicely to avoid pink edges */
-        SetBkColor(hdc, RGB(12, 12, 18)); /* Dark background fallback for anti-aliasing */
+        DrawTextW(hdc, L"ClipWheel", -1, &br, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    }
+    {
+        RECT hint = {cx - 180, cy + outer_r + 24, cx + 180, cy + outer_r + 52};
+        SetBkColor(hdc, RGB(12, 12, 18));
         SetTextColor(hdc, mix_color(COL_TEXT_TERTIARY, COL_TEXT_SECONDARY, t_text));
         SelectObject(hdc, g_font_caption);
-        DrawTextW(hdc, L"ESC \u6216\u6ed1\u81f3\u5e95\u90e8\u53d6\u6d88 \xb7 \u677e\u5f00\u7c98\u8d34 \xb7 \u2190\u2191\u2193\u2192\u9009\u6247\u533a", -1, &hint_rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        RestoreDC(hdc, s4);
+        DrawTextW(hdc, L"ESC \u6216\u6ed1\u81f3\u5e95\u90e8\u53d6\u6d88 \xb7 \u677e\u5f00\u7c98\u8d34 \xb7 \u2190\u2191\u2193\u2192\u9009\u6247\u533a", -1, &hint, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
+    RestoreDC(hdc, s4);
+}
 
+void draw_wheel(HDC hdc, int w, int h) {
+    int cx, cy, outer_r, inner_r, old_mode;
+    float appear = ease_out_backf(g_wheel_appear);
+    float t_text = ease_out_cubicf(g_wheel_appear);
+    double step = 2.0 * WHEEL_PI / (double)NSECT;
+
+    wheel_origin(hdc, w, h, &cx, &cy);
+    outer_r = (int)(OUTER_R * (0.6f + 0.4f * appear));
+    inner_r = (int)(INNER_R * (0.6f + 0.4f * appear));
+
+    old_mode = SetBkMode(hdc, TRANSPARENT);
+    draw_glow_rings(hdc, cx, cy, outer_r);
+    draw_wheel_base(hdc, cx, cy, outer_r);
+    draw_wheel_sectors(hdc, cx, cy, outer_r, step);
+    draw_wheel_hub(hdc, cx, cy, inner_r, appear, t_text);
+    draw_wheel_labels(hdc, cx, cy, outer_r, inner_r, step, t_text);
     SetBkMode(hdc, old_mode);
 }
 
@@ -929,12 +917,183 @@ void draw_main_window_background(HDC hdc, const RECT *rc) {
     DeleteObject(blob_a); DeleteObject(blob_b);
 }
 
+/* ─── Manager painting helpers ──────────────────────────────────────────────── */
+
+static void draw_nav_bar(HDC hdc, int width, float pulse) {
+    COLORREF accent_live = mix_color(COL_ACCENT, COL_ACCENT_HOVER, pulse * 0.85f);
+    RECT nav = {0, 0, width, NAV_H};
+    fill_vertical_gradient(hdc, &nav, RGB(20, 22, 34), RGB(14, 15, 24));
+    {
+        HPEN lp = CreatePen(PS_SOLID, 2, accent_live);
+        HGDIOBJ op = SelectObject(hdc, lp);
+        MoveToEx(hdc, 0, NAV_H - 1, NULL);
+        LineTo(hdc, 80 + (int)(50 * pulse), NAV_H - 1);
+        SelectObject(hdc, op); DeleteObject(lp);
+    }
+    {
+        HPEN dp = CreatePen(PS_SOLID, 1, mix_color(COL_BORDER_SUBTLE, COL_ACCENT, 0.15f));
+        HGDIOBJ op = SelectObject(hdc, dp);
+        MoveToEx(hdc, 0, NAV_H - 1, NULL);
+        LineTo(hdc, width, NAV_H - 1);
+        SelectObject(hdc, op); DeleteObject(dp);
+    }
+    SetBkMode(hdc, TRANSPARENT);
+    SelectObject(hdc, g_font_body_bold);
+    SetTextColor(hdc, COL_TEXT_PRIMARY);
+    RECT line = {CONTENT_PAD + 8, 0, CONTENT_PAD + 160, NAV_H};
+    DrawTextW(hdc, L"ClipWheel", -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+    SelectObject(hdc, g_font_caption);
+    SetTextColor(hdc, COL_TEXT_TERTIARY);
+    line.left = CONTENT_PAD + 118;
+    DrawTextW(hdc, L"控制中心", -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+
+    RECT hk = {CONTENT_PAD + 220, 10, CONTENT_PAD + 470, NAV_H - 10};
+    fill_round_gradient(hdc, &hk, RGB(34, 36, 52), RGB(24, 26, 40), 10);
+    draw_round_border(hdc, &hk, mix_color(COL_BORDER_SUBTLE, COL_ACCENT, 0.3f), 10, 1);
+    SelectObject(hdc, g_font_caption);
+    SetTextColor(hdc, mix_color(COL_ACCENT_GLOW, COL_WHITE, 0.3f + 0.4f * pulse));
+    RECT hki = {hk.left + 10, hk.top, hk.right - 6, hk.bottom};
+    wchar_t hkl[96];
+    swprintf_s(hkl, ARRAYSIZE(hkl), L"热键: %s", g_hotkey_label);
+    DrawTextW(hdc, hkl, -1, &hki, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+}
+
+static void draw_quick_action_card(HDC hdc, int width, int y) {
+    RECT card = {CONTENT_PAD, y, width - CONTENT_PAD, y + QUICK_CARD_H};
+    fill_round_gradient(hdc, &card, RGB(48, 51, 68), RGB(36, 38, 54), 12);
+    draw_round_border(hdc, &card, mix_color(COL_BORDER_SUBTLE, COL_ACCENT_GLOW, 0.2f), 12, 1);
+    SelectObject(hdc, g_font_caption);
+    SetTextColor(hdc, COL_TEXT_TERTIARY);
+    RECT line = {card.left + 16, y, card.left + 160, y + QUICK_CARD_H};
+    DrawTextW(hdc, L"快速操作", -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+
+    RECT pill = {width - CONTENT_PAD - 210, y + 14, width - CONTENT_PAD - 16, y + QUICK_CARD_H - 14};
+    COLORREF pc = g_auto_paste ? RGB(28, 70, 52) : RGB(58, 28, 30);
+    COLORREF pb = g_auto_paste ? RGB(52, 211, 153) : RGB(248, 113, 113);
+    fill_round_gradient(hdc, &pill, pc, mix_color(pc, RGB(0, 0, 0), 0.3f), 10);
+    draw_round_border(hdc, &pill, pb, 10, 1);
+    SetTextColor(hdc, pb);
+    SelectObject(hdc, g_font_caption);
+    DrawTextW(hdc, g_auto_paste ? L"\u81ea\u52a8\u7c98\u8d34 \u2713" : L"\u81ea\u52a8\u7c98\u8d34 \u2717",
+              -1, &pill, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+}
+
+static void draw_settings_card(HDC hdc, int width, int y, COLORREF accent_live) {
+    RECT card = {CONTENT_PAD, y, width - CONTENT_PAD, y + SETTINGS_H};
+    fill_round_gradient(hdc, &card, RGB(42, 44, 60), RGB(30, 32, 48), 12);
+    draw_round_border(hdc, &card, mix_color(COL_BORDER_SUBTLE, COL_ACCENT, 0.18f), 12, 1);
+
+    SelectObject(hdc, g_font_title);
+    SetTextColor(hdc, COL_TEXT_PRIMARY);
+    RECT line = {card.left + 16, y + 10, card.left + 220, y + 40};
+    DrawTextW(hdc, L"\u70ed\u952e\u4e0e\u884c\u4e3a", -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+
+    if (g_recording) {
+        SelectObject(hdc, g_font_caption);
+        SetTextColor(hdc, accent_live);
+        line.left = card.right - 380;
+        line.right = card.right - 16;
+        line.top = y + 10;
+        line.bottom = y + 40;
+        DrawTextW(hdc, L"\u25cf \u6b63\u5728\u5f55\u5236\u2026 \u8bf7\u6309\u4e0b\u70ed\u952e\u7ec4\u5408", -1, &line,
+                  DT_RIGHT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+    } else {
+        wchar_t cur[128];
+        swprintf_s(cur, ARRAYSIZE(cur), L"\u5f53\u524d: %s", g_hotkey_label);
+        SelectObject(hdc, g_font_caption);
+        SetTextColor(hdc, COL_TEXT_SECONDARY);
+        line.left = card.right - 320;
+        line.right = card.right - 16;
+        line.top = y + 10;
+        line.bottom = y + 40;
+        DrawTextW(hdc, cur, -1, &line, DT_RIGHT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+    }
+}
+
+static void draw_column_cards(HDC hdc, int width, int height, int y, int right_x) {
+    RECT lc = {CONTENT_PAD, y, CONTENT_PAD + g_side_w_left, height - CONTENT_PAD};
+    RECT rc = {right_x, y, width - CONTENT_PAD, height - CONTENT_PAD};
+    fill_round_gradient(hdc, &lc, RGB(36, 38, 54), RGB(24, 26, 40), 14);
+    fill_round_gradient(hdc, &rc, RGB(36, 38, 54), RGB(24, 26, 40), 14);
+    draw_round_border(hdc, &lc, mix_color(COL_BORDER_SUBTLE, COL_ACCENT, 0.14f), 14, 1);
+    draw_round_border(hdc, &rc, mix_color(COL_BORDER_SUBTLE, COL_ACCENT, 0.14f), 14, 1);
+
+    SelectObject(hdc, g_font_title);
+    SetTextColor(hdc, COL_TEXT_PRIMARY);
+    RECT line = {lc.left + 14, y + 14, lc.right - 100, y + 44};
+    DrawTextW(hdc, L"\u56fa\u5b9a\u5185\u5bb9", -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+
+    RECT badge = {lc.right - 94, y + 16, lc.right - 10, y + 42};
+    fill_round_gradient(hdc, &badge, RGB(108, 116, 250), RGB(89, 97, 231), 10);
+    draw_round_border(hdc, &badge, COL_ACCENT_GLOW, 10, 1);
+    SetTextColor(hdc, COL_WHITE);
+    SelectObject(hdc, g_font_caption);
+    DrawTextW(hdc, L"\u8f6e\u76d8\u4f18\u5148", -1, &badge, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+    SelectObject(hdc, g_font_caption);
+    SetTextColor(hdc, COL_TEXT_TERTIARY);
+    line.top = y + 46;
+    line.bottom = y + 68;
+    line.right = lc.right - 10;
+    DrawTextW(hdc, L"\u56fa\u5b9a\u9879\u4f18\u5148\u586b\u5145\u8f6e\u76d8\u6d4e\u533a", -1, &line,
+              DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+
+    SelectObject(hdc, g_font_title);
+    SetTextColor(hdc, COL_TEXT_PRIMARY);
+    line.left = rc.left + 14;
+    line.top = y + 14;
+    line.right = rc.right - 100;
+    line.bottom = y + 44;
+    DrawTextW(hdc, L"\u6700\u8fd1\u5386\u53f2", -1, &line, DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+
+    badge.left = rc.right - 94;
+    badge.top = y + 16;
+    badge.right = rc.right - 10;
+    badge.bottom = y + 42;
+    fill_round_gradient(hdc, &badge, RGB(108, 116, 250), RGB(89, 97, 231), 10);
+    draw_round_border(hdc, &badge, COL_ACCENT_GLOW, 10, 1);
+    SetTextColor(hdc, COL_WHITE);
+    SelectObject(hdc, g_font_caption);
+    DrawTextW(hdc, L"\u81ea\u52a8\u8bb0\u5f55", -1, &badge, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+    SelectObject(hdc, g_font_caption);
+    SetTextColor(hdc, COL_TEXT_TERTIARY);
+    line.left = rc.left + 14;
+    line.top = y + 46;
+    line.bottom = y + 68;
+    line.right = rc.right - 10;
+    DrawTextW(hdc, L"\u62d6\u5165\u4e2d\u95f4\u8f6e\u76d8\u53ef\u56fa\u5b9a", -1, &line,
+              DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+
+    HPEN sp = CreatePen(PS_SOLID, 1, mix_color(COL_BORDER_SUBTLE, COL_ACCENT, 0.4f));
+    HGDIOBJ op = SelectObject(hdc, sp);
+    int sy = y, sh = height - CONTENT_PAD - y;
+    int sx1 = CONTENT_PAD + g_side_w_left + 6;
+    int sx2 = right_x - 6;
+    MoveToEx(hdc, sx1, sy + 20, NULL); LineTo(hdc, sx1, sy + sh - 20);
+    MoveToEx(hdc, sx2, sy + 20, NULL); LineTo(hdc, sx2, sy + sh - 20);
+    SelectObject(hdc, op); DeleteObject(sp);
+
+    if (g_manager_search) {
+        int sry = rc.top + 72;
+        RECT sr = {rc.left + 14, sry, rc.right - 14, sry + 30};
+        fill_round_gradient(hdc, &sr, RGB(58, 60, 78), RGB(46, 48, 64), 8);
+        draw_round_border(hdc, &sr, COL_ACCENT, 8, 1);
+        SelectObject(hdc, g_font_caption);
+        SetTextColor(hdc, COL_TEXT_PRIMARY);
+        wchar_t disp[280];
+        swprintf_s(disp, ARRAYSIZE(disp), L"\u641c\u7d22: %s_", g_manager_search_buf);
+        DrawTextW(hdc, disp, -1, &sr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+    }
+}
+
+
 void paint_main_window(HWND hwnd) {
-    PAINTSTRUCT ps; RECT rc, nav, card, left_card, right_card, badge, line;
+    PAINTSTRUCT ps;
+    RECT rc;
     HDC hdc_screen = BeginPaint(hwnd, &ps);
-    int width, height, y;
     GetClientRect(hwnd, &rc);
-    width = rc.right - rc.left; height = rc.bottom - rc.top;
+    int width = rc.right - rc.left, height = rc.bottom - rc.top;
     HDC hdc = CreateCompatibleDC(hdc_screen);
     HBITMAP bmp = CreateCompatibleBitmap(hdc_screen, width, height);
     HBITMAP old_bmp = (HBITMAP)SelectObject(hdc, bmp);
@@ -943,146 +1102,36 @@ void paint_main_window(HWND hwnd) {
     int cg = 12;
     int center_w = total_w - g_side_w_left - g_side_w_right - 2 * cg;
     int right_x  = CONTENT_PAD + g_side_w_left + cg + center_w + cg;
-
     float pulse = 0.5f + 0.5f * (float)sin(g_main_phase);
     COLORREF accent_live = mix_color(COL_ACCENT, COL_ACCENT_HOVER, pulse * 0.85f);
 
-    /* Background */
     fill_vertical_gradient(hdc, &rc, RGB(8, 10, 16), RGB(11, 11, 16));
-    { HBRUSH ba = CreateSolidBrush(RGB(21,26,45)), bb = CreateSolidBrush(RGB(16,18,34));
-      HGDIOBJ obr = SelectObject(hdc, ba), opn = SelectObject(hdc, GetStockObject(NULL_PEN));
-      Ellipse(hdc, width-380,-80,width+80,240); SelectObject(hdc, bb);
-      Ellipse(hdc,-160,height-300,300,height+100);
-      SelectObject(hdc,obr); SelectObject(hdc,opn); DeleteObject(ba); DeleteObject(bb); }
-
-    /* Compact nav bar */
-    nav.left=0; nav.top=0; nav.right=width; nav.bottom=NAV_H;
-    fill_vertical_gradient(hdc, &nav, RGB(20,22,34), RGB(14,15,24));
-    { HPEN lp = CreatePen(PS_SOLID, 2, accent_live); HGDIOBJ op = SelectObject(hdc, lp);
-      MoveToEx(hdc, 0, NAV_H-1, NULL); LineTo(hdc, 80+(int)(50*pulse), NAV_H-1);
-      SelectObject(hdc,op); DeleteObject(lp); }
-    { HPEN dp = CreatePen(PS_SOLID, 1, mix_color(COL_BORDER_SUBTLE,COL_ACCENT,0.15f));
-      HGDIOBJ op = SelectObject(hdc,dp);
-      MoveToEx(hdc,0,NAV_H-1,NULL); LineTo(hdc,width,NAV_H-1);
-      SelectObject(hdc,op); DeleteObject(dp); }
-    SetBkMode(hdc, TRANSPARENT);
-    SelectObject(hdc, g_font_body_bold); SetTextColor(hdc, COL_TEXT_PRIMARY);
-    line.left=CONTENT_PAD+8; line.top=0; line.right=CONTENT_PAD+160; line.bottom=NAV_H;
-    DrawTextW(hdc, L"ClipWheel", -1, &line, DT_LEFT|DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
-    SelectObject(hdc, g_font_caption); SetTextColor(hdc, COL_TEXT_TERTIARY);
-    line.left=CONTENT_PAD+118;
-    DrawTextW(hdc, L"控制中心", -1, &line, DT_LEFT|DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
-    /* Hotkey pill in nav */
-    { RECT hk={CONTENT_PAD+220,10,CONTENT_PAD+470,NAV_H-10};
-      fill_round_gradient(hdc,&hk,RGB(34,36,52),RGB(24,26,40),10);
-      draw_round_border(hdc,&hk,mix_color(COL_BORDER_SUBTLE,COL_ACCENT,0.3f),10,1);
-      SelectObject(hdc,g_font_caption);
-      SetTextColor(hdc,mix_color(COL_ACCENT_GLOW,COL_WHITE,0.3f+0.4f*pulse));
-      RECT hki={hk.left+10,hk.top,hk.right-6,hk.bottom};
-      wchar_t hkl[96]; swprintf_s(hkl,ARRAYSIZE(hkl),L"热键: %s",g_hotkey_label);
-      DrawTextW(hdc,hkl,-1,&hki,DT_LEFT|DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX); }
-
-    /* Quick action card */
-    y = NAV_H + SECTION_GAP;
-    card.left=CONTENT_PAD; card.top=y;
-    card.right=width-CONTENT_PAD; card.bottom=y+QUICK_CARD_H;
-    fill_round_gradient(hdc,&card,RGB(48,51,68),RGB(36,38,54),12);
-    draw_round_border(hdc,&card,mix_color(COL_BORDER_SUBTLE,COL_ACCENT_GLOW,0.2f),12,1);
-    SelectObject(hdc,g_font_caption); SetTextColor(hdc,COL_TEXT_TERTIARY);
-    line.left=card.left+16; line.top=y; line.right=card.left+160; line.bottom=y+QUICK_CARD_H;
-    DrawTextW(hdc,L"快速操作",-1,&line,DT_LEFT|DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
-    { RECT pill={width-CONTENT_PAD-210,y+14,width-CONTENT_PAD-16,y+QUICK_CARD_H-14};
-      COLORREF pc=g_auto_paste?RGB(28,70,52):RGB(58,28,30);
-      COLORREF pb=g_auto_paste?RGB(52,211,153):RGB(248,113,113);
-      fill_round_gradient(hdc,&pill,pc,mix_color(pc,RGB(0,0,0),0.3f),10);
-      draw_round_border(hdc,&pill,pb,10,1); SetTextColor(hdc,pb);
-      SelectObject(hdc,g_font_caption);
-      DrawTextW(hdc,g_auto_paste?L"\u81ea\u52a8\u7c98\u8d34 \u2713":L"\u81ea\u52a8\u7c98\u8d34 \u2717",
-                -1,&pill,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX); }
-
-    /* Settings card */
-    y += QUICK_CARD_H + SECTION_GAP;
-    card.top=y; card.bottom=y+SETTINGS_H;
-    fill_round_gradient(hdc,&card,RGB(42,44,60),RGB(30,32,48),12);
-    draw_round_border(hdc,&card,mix_color(COL_BORDER_SUBTLE,COL_ACCENT,0.18f),12,1);
-    
-    SelectObject(hdc,g_font_title); SetTextColor(hdc,COL_TEXT_PRIMARY);
-    line.left=card.left+16; line.top=y+10; line.right=card.left+220; line.bottom=y+40;
-    DrawTextW(hdc,L"\u70ed\u952e\u4e0e\u884c\u4e3a",-1,&line,DT_LEFT|DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
-
-    if (g_recording) {
-        SelectObject(hdc,g_font_caption); SetTextColor(hdc,accent_live);
-        line.left=card.right-380; line.right=card.right-16; line.top=y+10; line.bottom=y+40;
-        DrawTextW(hdc,L"\u25cf \u6b63\u5728\u5f55\u5236\u2026 \u8bf7\u6309\u4e0b\u70ed\u952e\u7ec4\u5408",-1,&line,DT_RIGHT|DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
-    } else {
-        wchar_t cur[128]; swprintf_s(cur,ARRAYSIZE(cur),L"\u5f53\u524d: %s",g_hotkey_label);
-        SelectObject(hdc,g_font_caption); SetTextColor(hdc,COL_TEXT_SECONDARY);
-        line.left=card.right-320; line.right=card.right-16; line.top=y+10; line.bottom=y+40;
-        DrawTextW(hdc,cur,-1,&line,DT_RIGHT|DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
-    }
-
-    /* 3-column cards */
-    y += SETTINGS_H + SECTION_GAP;
-    left_card.left=CONTENT_PAD; left_card.top=y;
-    left_card.right=CONTENT_PAD+g_side_w_left; left_card.bottom=height-CONTENT_PAD;
-    right_card.left=right_x; right_card.top=y;
-    right_card.right=width-CONTENT_PAD; right_card.bottom=height-CONTENT_PAD;
-    fill_round_gradient(hdc,&left_card,RGB(36,38,54),RGB(24,26,40),14);
-    fill_round_gradient(hdc,&right_card,RGB(36,38,54),RGB(24,26,40),14);
-    draw_round_border(hdc,&left_card,mix_color(COL_BORDER_SUBTLE,COL_ACCENT,0.14f),14,1);
-    draw_round_border(hdc,&right_card,mix_color(COL_BORDER_SUBTLE,COL_ACCENT,0.14f),14,1);
-
-    SelectObject(hdc, g_font_title); SetTextColor(hdc, COL_TEXT_PRIMARY);
-    line.left=left_card.left+14; line.top=y+14; line.right=left_card.right-100; line.bottom=y+44;
-    DrawTextW(hdc,L"\u56fa\u5b9a\u5185\u5bb9",-1,&line,DT_LEFT|DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
-    badge.left=left_card.right-94; badge.top=y+16; badge.right=left_card.right-10; badge.bottom=y+42;
-    fill_round_gradient(hdc,&badge,RGB(108,116,250),RGB(89,97,231),10);
-    draw_round_border(hdc,&badge,COL_ACCENT_GLOW,10,1);
-    SetTextColor(hdc,COL_WHITE); SelectObject(hdc,g_font_caption);
-    DrawTextW(hdc,L"\u8f6e\u76d8\u4f18\u5148",-1,&badge,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX);
-    SelectObject(hdc,g_font_caption); SetTextColor(hdc,COL_TEXT_TERTIARY);
-    line.top=y+46; line.bottom=y+68; line.right=left_card.right-10;
-    DrawTextW(hdc,L"\u56fa\u5b9a\u9879\u4f18\u5148\u586b\u5145\u8f6e\u76d8\u6d4e\u533a",-1,&line,DT_LEFT|DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
-
-    SelectObject(hdc,g_font_title); SetTextColor(hdc,COL_TEXT_PRIMARY);
-    line.left=right_card.left+14; line.top=y+14; line.right=right_card.right-100; line.bottom=y+44;
-    DrawTextW(hdc,L"\u6700\u8fd1\u5386\u53f2",-1,&line,DT_LEFT|DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
-    badge.left=right_card.right-94; badge.top=y+16; badge.right=right_card.right-10; badge.bottom=y+42;
-    fill_round_gradient(hdc,&badge,RGB(108,116,250),RGB(89,97,231),10);
-    draw_round_border(hdc,&badge,COL_ACCENT_GLOW,10,1);
-    SetTextColor(hdc,COL_WHITE); SelectObject(hdc,g_font_caption);
-    DrawTextW(hdc,L"\u81ea\u52a8\u8bb0\u5f55",-1,&badge,DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX);
-    SelectObject(hdc,g_font_caption); SetTextColor(hdc,COL_TEXT_TERTIARY);
-    line.left=right_card.left+14; line.top=y+46; line.bottom=y+68; line.right=right_card.right-10;
-    DrawTextW(hdc,L"\u62d6\u5165\u4e2d\u95f4\u8f6e\u76d8\u53ef\u56fa\u5b9a",-1,&line,DT_LEFT|DT_SINGLELINE|DT_VCENTER|DT_NOPREFIX);
-
-    /* Draw splitters */
     {
-        HPEN split_pen = CreatePen(PS_SOLID, 1, mix_color(COL_BORDER_SUBTLE, COL_ACCENT, 0.4f));
-        HGDIOBJ op = SelectObject(hdc, split_pen);
-        int sy = y, sh = height - CONTENT_PAD - y;
-        int sx1 = CONTENT_PAD + g_side_w_left + cg / 2;
-        int sx2 = right_x - cg / 2;
-        MoveToEx(hdc, sx1, sy + 20, NULL); LineTo(hdc, sx1, sy + sh - 20);
-        MoveToEx(hdc, sx2, sy + 20, NULL); LineTo(hdc, sx2, sy + sh - 20);
-        SelectObject(hdc, op); DeleteObject(split_pen);
+        HBRUSH ba = CreateSolidBrush(RGB(21, 26, 45)), bb = CreateSolidBrush(RGB(16, 18, 34));
+        HGDIOBJ obr = SelectObject(hdc, ba), opn = SelectObject(hdc, GetStockObject(NULL_PEN));
+        Ellipse(hdc, width - 380, -80, width + 80, 240);
+        SelectObject(hdc, bb);
+        Ellipse(hdc, -160, height - 300, 300, height + 100);
+        SelectObject(hdc, obr); SelectObject(hdc, opn);
+        DeleteObject(ba); DeleteObject(bb);
     }
 
-    if (g_manager_search) {
-        int sy=right_card.top+72;
-        RECT sr={right_card.left+14,sy,right_card.right-14,sy+30};
-        fill_round_gradient(hdc,&sr,RGB(58,60,78),RGB(46,48,64),8);
-        draw_round_border(hdc,&sr,COL_ACCENT,8,1);
-        SelectObject(hdc,g_font_caption); SetTextColor(hdc,COL_TEXT_PRIMARY);
-        wchar_t disp[280]; swprintf_s(disp,ARRAYSIZE(disp),L"\u641c\u7d22: %s_",g_manager_search_buf);
-        DrawTextW(hdc,disp,-1,&sr,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_NOPREFIX);
-    }
+    draw_nav_bar(hdc, width, pulse);
 
-    BitBlt(hdc_screen,0,0,width,height,hdc,0,0,SRCCOPY);
-    SelectObject(hdc,old_bmp); DeleteObject(bmp); DeleteDC(hdc);
-    EndPaint(hwnd,&ps);
+    int y = NAV_H + SECTION_GAP;
+    draw_quick_action_card(hdc, width, y);
+
+    y += QUICK_CARD_H + SECTION_GAP;
+    draw_settings_card(hdc, width, y, accent_live);
+
+    y += SETTINGS_H + SECTION_GAP;
+    draw_column_cards(hdc, width, height, y, right_x);
+
+    BitBlt(hdc_screen, 0, 0, width, height, hdc, 0, 0, SRCCOPY);
+    SelectObject(hdc, old_bmp); DeleteObject(bmp);
+    DeleteDC(hdc);
+    EndPaint(hwnd, &ps);
 }
-
 
 /* ─── Splash ───────────────────────────────────────────────────────────────── */
 

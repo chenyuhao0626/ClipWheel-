@@ -7,8 +7,8 @@ IDI_APP_ICON            ICON                    "clipwheel.ico"
 
 // Version Information
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 2,1,0,0
- PRODUCTVERSION 2,1,0,0
+ FILEVERSION 2,2,0,0
+ PRODUCTVERSION 2,2,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -25,12 +25,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "ClipWheel"
             VALUE "FileDescription", "ClipWheel - 极速粘贴，指尖流转"
-            VALUE "FileVersion", "2.1.0.0"
+            VALUE "FileVersion", "2.2.0.0"
             VALUE "InternalName", "clipwheel.exe"
             VALUE "LegalCopyright", "Copyright (C) 2026 ClipWheel. All rights reserved."
             VALUE "OriginalFilename", "clipwheel.exe"
             VALUE "ProductName", "ClipWheel"
-            VALUE "ProductVersion", "2.1.0.0"
+            VALUE "ProductVersion", "2.2.0.0"
         END
     END
     BLOCK "VarFileInfo"
