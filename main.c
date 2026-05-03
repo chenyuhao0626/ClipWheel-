@@ -611,7 +611,6 @@ void hide_wheel_commit(void) {
     g_wheel_appear = 1.0f;
     g_cancel_heat = 0.0f;
     ShowWindow(g_overlay_hwnd, SW_HIDE);
-    if (!g_floating_mode) SetCursorPos(g_original_cursor_pos.x, g_original_cursor_pos.y);
     SetCursorPos(g_original_cursor_pos.x, g_original_cursor_pos.y);
     apply_selection_to_target();
     g_sel = -1;
@@ -625,7 +624,6 @@ void hide_wheel_cancel(void) {
     g_sel = -1;
     g_hotkey_suppress = 1;
     ShowWindow(g_overlay_hwnd, SW_HIDE);
-    if (!g_floating_mode) SetCursorPos(g_original_cursor_pos.x, g_original_cursor_pos.y);
     SetCursorPos(g_original_cursor_pos.x, g_original_cursor_pos.y);
 }
 

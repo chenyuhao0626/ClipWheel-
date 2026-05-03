@@ -289,7 +289,7 @@ LRESULT CALLBACK CardListProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             GetCursorPos(&pt);
             wchar_t text_buf[CW_MAX_CHARS];
             if (card_list_copy_for_kind(state->kind, index, text_buf, ARRAYSIZE(text_buf))) {
-                wchar_t label[CW_MAX_CHARS + 32];
+            wchar_t label[CW_MAX_CHARS + 64];
                 swprintf_s(label, ARRAYSIZE(label), L"编辑: %s", text_buf);
                 AppendMenuW(m, MF_STRING, 1, L"复制到剪贴板");
                 if (state->kind == CARD_KIND_HISTORY) AppendMenuW(m, MF_STRING, 2, L"固定此项");

@@ -14,6 +14,10 @@ build_out.txt
 # Distribution
 dist/
 
+# Screenshots (large binary, not needed in repo)
+assets/screenshots/
+clipwheel.png
+
 # IDE
 .vs/
 .vscode/

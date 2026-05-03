@@ -425,5 +425,34 @@ int cw_history_selftest(void) {
 
     cw_history_clear_all_pins();
     if (g_pin_count != 0) return 0;
+
+    cw_history_on_copy(L"hist-alpha");
+    cw_history_on_copy(L"hist-beta");
+    cw_history_on_copy(L"hist-gamma");
+    if (g_hist_count != 3) return 0;
+    if (wcscmp(g_hist[0], L"hist-gamma") != 0) return 0;
+    if (wcscmp(g_hist[1], L"hist-beta") != 0) return 0;
+
+    cw_history_on_copy(L"hist-gamma");
+    if (g_hist_count != 3) return 0;
+
+    {
+        wchar_t slots[CW_MAX_SLOT][CW_MAX_CHARS];
+        int n = cw_history_fill_slots(slots);
+        if (n != 3) return 0;
+        if (wcscmp(slots[0], L"hist-gamma") != 0) return 0;
+        if (wcscmp(slots[1], L"hist-beta") != 0) return 0;
+        if (wcscmp(slots[2], L"hist-alpha") != 0) return 0;
+    }
+
+    cw_history_delete_history_index(1);
+    if (g_hist_count != 2) return 0;
+    if (wcscmp(g_hist[0], L"hist-gamma") != 0) return 0;
+    if (wcscmp(g_hist[1], L"hist-alpha") != 0) return 0;
+
+    cw_history_delete_history_index(0);
+    cw_history_delete_history_index(0);
+    if (g_hist_count != 0) return 0;
+
     return 1;
 }

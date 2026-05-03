@@ -29,35 +29,21 @@
 #endif
 
 /* ─── Color system ─────────────────────────────────────────────────────── */
-#define COL_BLACK          RGB(0, 0, 0)
-#define COL_NAV            RGB(9, 9, 11)
-#define COL_HERO           RGB(24, 24, 27)
-#define COL_PAGE           RGB(18, 18, 24)
-#define COL_LIGHT          RGB(255, 255, 255)
-#define COL_LIGHT_CARD     RGB(39, 39, 42)
-#define COL_LIGHT_CARD2    RGB(63, 63, 70)
-#define COL_TEXT_DARK      RGB(250, 250, 250)
-#define COL_TEXT_SOFT      RGB(163, 163, 174)
-#define COL_TEXT_TERTIARY  RGB(113, 113, 122)
 #define COL_WHITE          RGB(255, 255, 255)
 #define COL_ACCENT         RGB(99, 102, 241)
 #define COL_ACCENT_HOVER   RGB(129, 140, 248)
-#define COL_ACCENT_SOFT    RGB(79, 70, 229)
 #define COL_ACCENT_GLOW    RGB(199, 210, 254)
-#define COL_LINK_DARK      RGB(167, 139, 250)
-#define COL_DIVIDER        RGB(39, 39, 42)
+#define COL_TEXT_TERTIARY  RGB(113, 113, 122)
+
 #define COL_WHEEL_BG       RGB(15, 15, 18)
 #define COL_WHEEL_SECTOR   RGB(35, 35, 40)
 #define COL_WHEEL_BORDER   RGB(71, 85, 105)
 #define COL_WHEEL_HIGHLIGHT RGB(167, 139, 250)
 #define COL_WHEEL_GLOW     RGB(99, 102, 241)
-#define COL_GLASS_DARK     RGB(39, 39, 42)
-#define COL_GLASS_LIGHT    RGB(255, 255, 255)
 
 #define COL_BG_DEEP        RGB(9, 9, 11)
 #define COL_BG_SURFACE     RGB(18, 18, 24)
 #define COL_BG_CARD        RGB(39, 39, 42)
-#define COL_BG_HOVER       RGB(63, 63, 70)
 #define COL_BORDER_SUBTLE  RGB(39, 39, 42)
 #define COL_BORDER_FOCUS   RGB(129, 140, 248)
 #define COL_TEXT_PRIMARY   RGB(250, 250, 250)
@@ -236,7 +222,6 @@ extern wchar_t g_manager_search_buf[256];
 
 /* ─── Navigation ───────────────────────────────────────────────────────── */
 #define NAV_H          60
-#define HERO_H          0
 #define QUICK_CARD_H   64
 #define SETTINGS_H     100
 #define SECTION_GAP    12
