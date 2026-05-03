@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmd /c build.bat)",
+      "Read(//mnt/c/Users/Administrator/Projects/**)",
+      "Bash(powershell.exe -Command \"& { cmd /c build.bat 2>&1 }\")",
+      "Bash(powershell.exe -Command \"Set-Location 'C:\\\\Users\\\\Administrator\\\\Projects\\\\clipwheel'; cmd /c build.bat 2>&1\")",
+      "Bash(/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command \"cmd /c build.bat 2>&1\")",
+      "Bash(/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command \"& 'C:\\\\Windows\\\\System32\\\\cmd.exe' /c 'cd /d C:\\\\Users\\\\Administrator\\\\Projects\\\\clipwheel && build.bat' 2>&1\")",
+      "Bash(/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command \"Set-Location 'C:\\\\Users\\\\Administrator\\\\Projects\\\\clipwheel'; & 'C:\\\\Windows\\\\System32\\\\cmd.exe' '/c' 'build.bat'\")",
+      "Bash(/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -Command ' *)"
+    ]
+  }
+}

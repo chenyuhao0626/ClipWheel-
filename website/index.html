@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClipWheel — 极速粘贴，指尖流转</title>
+  <meta name="description" content="ClipWheel：为 Windows 设计的极致轻量剪贴板增强神器，径向轮盘重新定义复制粘贴体验。" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #060608;
+      --bg-2:      #0d0d12;
+      --bg-3:      #13131a;
+      --surface:   rgba(255,255,255,0.04);
+      --border:    rgba(255,255,255,0.07);
+      --border-hi: rgba(255,255,255,0.14);
+      --text:      #f0f0f5;
+      --text-2:    rgba(240,240,245,0.55);
+      --text-3:    rgba(240,240,245,0.3);
+      --accent:    #4f9eff;
+      --accent-2:  #a78bfa;
+      --amber:     #ffb340;
+      --green:     #30d158;
+      --r: 2rem;
+      --r-sm: 1rem;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── NOISE OVERLAY ─── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      opacity: 0.025;
+    }
+
+    /* ─── NAV ─── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 2.5rem;
+      height: 58px;
+      background: rgba(6,6,8,0.72);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.3s;
+    }
+    .nav-logo {
+      display: flex; align-items: center; gap: 9px;
+      font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1.1rem;
+      color: var(--text); text-decoration: none; letter-spacing: -0.02em;
+    }
+    .nav-logo .logo-icon {
+      width: 28px; height: 28px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-radius: 7px; display: grid; place-items: center;
+    }
+    .nav-logo .logo-icon svg { width: 16px; height: 16px; stroke: white; }
+    .nav-links { display: flex; align-items: center; gap: 2rem; list-style: none; }
+    .nav-links a {
+      color: var(--text-2); text-decoration: none; font-size: 0.875rem;
+      font-weight: 400; transition: color 0.2s; letter-spacing: 0.01em;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 92px;
+      background: linear-gradient(135deg, var(--accent), #2e6ef2);
+      color: #ffffff;
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 0.46rem 1.08rem; border-radius: 999px;
+      font-family: "Microsoft YaHei UI", "PingFang SC", "DM Sans", sans-serif;
+      font-size: 0.875rem; font-weight: 600; line-height: 1.1;
+      text-decoration: none;
+      box-shadow: 0 6px 22px rgba(79,158,255,0.28);
+      transition: transform 0.2s, box-shadow 0.2s, filter 0.2s;
+    }
+    .nav-cta:hover {
+      color: #ffffff;
+      transform: translateY(-1px);
+      box-shadow: 0 10px 26px rgba(79,158,255,0.34);
+      filter: brightness(1.04);
+    }
+
+    /* ─── HERO ─── */
+    .hero {
+      position: relative; min-height: 100vh;
+      display: grid; place-items: center;
+      padding: 6rem 2rem 4rem;
+      overflow: hidden;
+    }
+    /* Ambient background blobs */
+    .hero-blob {
+      position: absolute; border-radius: 50%;
+      filter: blur(80px); pointer-events: none;
+    }
+    .hero-blob-1 {
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(79,158,255,0.12) 0%, transparent 70%);
+      top: -100px; left: -200px;
+      animation: drift1 12s ease-in-out infinite alternate;
+    }
+    .hero-blob-2 {
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(167,139,250,0.1) 0%, transparent 70%);
+      bottom: -80px; right: -150px;
+      animation: drift2 14s ease-in-out infinite alternate;
+    }
+    @keyframes drift1 { to { transform: translate(60px, 40px); } }
+    @keyframes drift2 { to { transform: translate(-50px, -30px); } }
+
+    .hero-inner {
+      position: relative; z-index: 1;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 5rem; align-items: center; max-width: 1100px; width: 100%;
+    }
+
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(79,158,255,0.1);
+      border: 1px solid rgba(79,158,255,0.2);
+      border-radius: 50px; padding: 4px 12px;
+      font-size: 0.75rem; color: var(--accent); margin-bottom: 1.5rem;
+      letter-spacing: 0.06em; text-transform: uppercase; font-weight: 500;
+    }
+    .hero-badge::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent); animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    .hero-title {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(2.8rem, 5vw, 4.2rem);
+      font-weight: 800; line-height: 1.08;
+      letter-spacing: -0.04em; margin-bottom: 1.5rem;
+    }
+    .hero-title .line2 {
+      background: linear-gradient(90deg, var(--accent), var(--accent-2) 60%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-sub {
+      font-size: 1.1rem; color: var(--text-2); line-height: 1.75;
+      margin-bottom: 2.5rem; font-weight: 300; max-width: 440px;
+    }
+
+    .hero-actions { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    .btn-primary-lg {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--text); color: var(--bg);
+      padding: 0.75rem 1.75rem; border-radius: 50px;
+      font-size: 0.95rem; font-weight: 500; text-decoration: none;
+      transition: all 0.2s; white-space: nowrap;
+    }
+    .btn-primary-lg svg { width: 16px; height: 16px; }
+    .btn-primary-lg:hover { background: #d0d0e0; transform: translateY(-1px); }
+    .btn-ghost-lg {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--text-2); font-size: 0.95rem; text-decoration: none;
+      transition: color 0.2s; font-weight: 400;
+    }
+    .btn-ghost-lg:hover { color: var(--text); }
+    .btn-ghost-lg svg { width: 14px; height: 14px; opacity: 0.6; }
+
+    /* ─── WHEEL DEMO ─── */
+    @keyframes rotate-slow { to { transform: rotate(360deg); } }
+
+    .wheel-wrap {
+      position: relative;
+      width: 380px; height: 380px;
+      margin: 0 auto;
+    }
+
+    /* Only the decorative SVG ring rotates — nothing else */
+    .wheel-svg-ring {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 340px; height: 340px;
+      margin-top: -170px; margin-left: -170px;
+      overflow: visible;
+      animation: rotate-slow 30s linear infinite;
+    }
+
+    /* Hub: centered via margin offset, NO animation transform conflict */
+    .wheel-hub {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 88px; height: 88px;
+      margin-top: -44px; margin-left: -44px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1c1c28, #0d0d14);
+      border: 1px solid rgba(255,255,255,0.12);
+      display: grid; place-items: center;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.8), 0 8px 32px rgba(0,0,0,0.6),
+                  inset 0 1px 0 rgba(255,255,255,0.08);
+      z-index: 2;
+    }
+    .wheel-hub-logo {
+      font-family: 'Syne', sans-serif; font-weight: 700;
+      font-size: 0.7rem; letter-spacing: 0.05em;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Item cards: JS sets top/left via rAF, transform only does centering */
+    .wheel-item {
+      position: absolute;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 14px; white-space: nowrap;
+      font-size: 0.75rem; color: var(--text-2);
+      pointer-events: none; user-select: none;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      z-index: 3;
+      transition: box-shadow 0.3s;
+    }
+    .wheel-item.active {
+      background: rgba(79,158,255,0.12);
+      border-color: rgba(79,158,255,0.3);
+      color: var(--accent);
+      box-shadow: 0 0 24px rgba(79,158,255,0.18);
+    }
+    .wheel-item .tag {
+      display: block; font-size: 0.6rem; color: var(--text-3);
+      margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+
+    /* Glow: also margin-based so no transform conflict */
+    .wheel-glow {
+      position: absolute; top: 50%; left: 50%;
+      width: 380px; height: 380px;
+      margin-top: -190px; margin-left: -190px;
+      border-radius: 50%; background: transparent;
+      box-shadow: 0 0 80px 0 rgba(79,158,255,0.1),
+                  inset 0 0 60px 0 rgba(79,158,255,0.04);
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ─── STATS ─── */
+    .stats-bar {
+      position: relative; z-index: 1;
+      display: flex; justify-content: center; gap: 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-2);
+    }
+    .stat-item {
+      flex: 1; max-width: 220px;
+      padding: 2rem 1.5rem; text-align: center;
+      border-right: 1px solid var(--border);
+    }
+    .stat-item:last-child { border-right: none; }
+    .stat-num {
+      font-family: 'Syne', sans-serif; font-size: 2.4rem; font-weight: 700;
+      letter-spacing: -0.04em; line-height: 1;
+      background: linear-gradient(135deg, var(--text) 0%, var(--text-2) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .stat-num span { font-size: 1.4rem; vertical-align: super; }
+    .stat-label {
+      margin-top: 0.4rem; font-size: 0.78rem; color: var(--text-3);
+      letter-spacing: 0.04em; text-transform: uppercase; font-weight: 400;
+    }
+
+    /* ─── SECTIONS ─── */
+    section.content { padding: 7rem 2rem; }
+    .container { max-width: 1100px; margin: 0 auto; }
+
+    .eyebrow {
+      font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 0.75rem;
+    }
+    .section-title {
+      font-family: 'Syne', sans-serif; font-size: clamp(2rem, 3.5vw, 3rem);
+      font-weight: 700; letter-spacing: -0.03em; line-height: 1.12;
+      margin-bottom: 1.25rem;
+    }
+    .section-sub {
+      font-size: 1rem; color: var(--text-2); max-width: 540px;
+      line-height: 1.8; font-weight: 300;
+    }
+
+    /* ─── BENTO GRID ─── */
+    .bento {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      grid-template-rows: auto;
+      gap: 1rem; margin-top: 4rem;
+    }
+    .bento-card {
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 2rem;
+      position: relative; overflow: hidden;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .bento-card::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .bento-card:hover { border-color: var(--border-hi); transform: translateY(-2px); }
+
+    .bento-card h3 {
+      font-family: 'Syne', sans-serif; font-size: 1.2rem;
+      font-weight: 600; margin-bottom: 0.65rem; letter-spacing: -0.02em;
+    }
+    .bento-card p { font-size: 0.9rem; color: var(--text-2); line-height: 1.7; }
+
+    .bento-card .card-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      display: grid; place-items: center; margin-bottom: 1.25rem;
+    }
+    .bento-card .card-icon svg { width: 20px; height: 20px; }
+
+    /* BENTO Layout */
+    .b-wheel   { grid-column: span 7; }
+    .b-hotkey  { grid-column: span 5; }
+    .b-persist { grid-column: span 4; }
+    .b-paste   { grid-column: span 4; }
+    .b-light   { grid-column: span 4; }
+
+    /* Accent cards */
+    .card-blue  { --accent-c: var(--accent); }
+    .card-purple { --accent-c: var(--accent-2); }
+    .card-amber { --accent-c: var(--amber); }
+    .card-green { --accent-c: var(--green); }
+    .card-white { --accent-c: rgba(255,255,255,0.7); }
+
+    .bento-card .card-icon { background: color-mix(in srgb, var(--accent-c) 15%, transparent); }
+    .bento-card .card-icon svg { stroke: var(--accent-c); }
+    .bento-card h3 { color: var(--text); }
+
+    /* Wheel card inner demo */
+    .mini-wheel-demo {
+      margin-top: 1.5rem;
+      position: relative; height: 160px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .mini-ring {
+      position: relative; width: 140px; height: 140px;
+    }
+    .mini-svg { width: 100%; height: 100%; overflow: visible; }
+    .mini-hub {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 44px; height: 44px; border-radius: 50%;
+      background: var(--bg-2); border: 1px solid var(--border-hi);
+      display: grid; place-items: center;
+    }
+    .mini-hub-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+    /* Hotkey card */
+    .key-combo {
+      display: flex; gap: 6px; align-items: center;
+      margin-top: 1.5rem; flex-wrap: wrap;
+    }
+    .key {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 7px; padding: 6px 12px;
+      font-size: 0.85rem; font-weight: 500; color: var(--text);
+      box-shadow: 0 2px 0 rgba(0,0,0,0.5);
+      font-family: 'DM Sans', sans-serif; letter-spacing: 0.02em;
+    }
+    .key-plus { color: var(--text-3); font-size: 0.75rem; }
+    .key.accent { background: rgba(79,158,255,0.15); border-color: rgba(79,158,255,0.3); color: var(--accent); }
+
+    /* ─── HOW IT WORKS ─── */
+    .how-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 0; margin-top: 4rem;
+      border: 1px solid var(--border); border-radius: var(--r);
+      overflow: hidden;
+    }
+    .how-step {
+      padding: 2.5rem 2rem;
+      border-right: 1px solid var(--border);
+      position: relative;
+      transition: background 0.3s;
+    }
+    .how-step:last-child { border-right: none; }
+    .how-step:hover { background: var(--surface); }
+    .step-num {
+      font-family: 'Syne', sans-serif; font-size: 3rem; font-weight: 800;
+      color: rgba(255,255,255,0.06); line-height: 1; margin-bottom: 1rem;
+      letter-spacing: -0.05em;
+    }
+    .how-step h4 {
+      font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .how-step p { font-size: 0.85rem; color: var(--text-2); line-height: 1.7; }
+    .step-icon {
+      width: 36px; height: 36px; border-radius: 8px;
+      display: grid; place-items: center;
+      margin-bottom: 1rem;
+    }
+    .step-icon svg { width: 18px; height: 18px; }
+
+    /* ─── TECH SECTION ─── */
+    .tech-section { background: var(--bg-2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .tech-inner {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 5rem; align-items: center;
+    }
+    .spec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 2rem; }
+    .spec-card {
+      background: var(--bg-3); border: 1px solid var(--border);
+      border-radius: var(--r-sm); padding: 1.25rem;
+    }
+    .spec-card .val {
+      font-family: 'Syne', sans-serif; font-size: 1.6rem; font-weight: 700;
+      letter-spacing: -0.04em;
+      background: linear-gradient(90deg, var(--text), var(--text-2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .spec-card .lbl { font-size: 0.72rem; color: var(--text-3); margin-top: 2px; letter-spacing: 0.04em; text-transform: uppercase; }
+
+    /* Code window */
+    .code-window {
+      background: #0a0a0f; border: 1px solid var(--border);
+      border-radius: var(--r); overflow: hidden;
+    }
+    .code-titlebar {
+      display: flex; align-items: center; gap: 6px;
+      padding: 12px 16px; background: var(--bg-3);
+      border-bottom: 1px solid var(--border);
+    }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-r { background: #ff5f57; }
+    .dot-y { background: #febc2e; }
+    .dot-g { background: #28c840; }
+    .code-body { padding: 1.5rem; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.8rem; line-height: 1.8; }
+    .c-comment { color: rgba(255,255,255,0.25); }
+    .c-kw { color: #cf8ef4; }
+    .c-fn { color: #79b8ff; }
+    .c-str { color: #9eff9e; }
+    .c-num { color: var(--amber); }
+    .c-type { color: #ffb340; }
+
+    /* ─── ROADMAP ─── */
+    .roadmap-timeline {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 1px; background: var(--border);
+      border: 1px solid var(--border); border-radius: var(--r); overflow: hidden;
+      margin-top: 4rem;
+    }
+    .rm-item {
+      background: var(--bg-3); padding: 2rem;
+      transition: background 0.3s;
+    }
+    .rm-item:hover { background: color-mix(in srgb, var(--bg-3) 80%, var(--surface)); }
+    .rm-tag {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 0.7rem; font-weight: 500; letter-spacing: 0.06em;
+      text-transform: uppercase; padding: 3px 10px; border-radius: 50px;
+      margin-bottom: 1.25rem;
+    }
+    .rm-tag.done { background: rgba(48,209,88,0.1); color: var(--green); border: 1px solid rgba(48,209,88,0.2); }
+    .rm-tag.now  { background: rgba(79,158,255,0.1); color: var(--accent); border: 1px solid rgba(79,158,255,0.2); }
+    .rm-tag.soon { background: rgba(255,179,64,0.1); color: var(--amber); border: 1px solid rgba(255,179,64,0.2); }
+    .rm-tag::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .rm-item h4 { font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .rm-item p { font-size: 0.85rem; color: var(--text-2); line-height: 1.7; }
+
+    /* ─── DOWNLOAD SECTION ─── */
+    .dl-section {
+      text-align: center; padding: 8rem 2rem;
+      position: relative; overflow: hidden;
+    }
+    .dl-section::before {
+      content: ''; position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 700px; height: 700px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(79,158,255,0.06) 0%, transparent 65%);
+      pointer-events: none;
+    }
+    .dl-section .section-title { font-size: clamp(2.5rem, 5vw, 4rem); margin-bottom: 1rem; }
+    .dl-section .section-sub { margin: 0 auto 2.5rem; text-align: center; max-width: 480px; }
+    .dl-btn {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: white; padding: 1rem 2.5rem; border-radius: 50px;
+      font-size: 1rem; font-weight: 500; text-decoration: none;
+      box-shadow: 0 0 40px rgba(79,158,255,0.25);
+      transition: all 0.3s; letter-spacing: -0.01em;
+    }
+    .dl-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 40px rgba(79,158,255,0.35); }
+    .dl-btn svg { width: 18px; height: 18px; }
+    .dl-note { margin-top: 1rem; font-size: 0.78rem; color: var(--text-3); }
+
+    /* ─── FOOTER ─── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 3rem 2rem 2.5rem;
+      background: var(--bg-2);
+    }
+    .footer-inner {
+      max-width: 1100px; margin: 0 auto;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 1rem;
+    }
+    .footer-logo {
+      display: flex; align-items: center; gap: 8px;
+      font-family: 'Syne', sans-serif; font-weight: 700;
+      color: var(--text-2); text-decoration: none; font-size: 0.95rem;
+    }
+    .footer-logo .logo-icon {
+      width: 24px; height: 24px; background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-radius: 6px; display: grid; place-items: center;
+    }
+    .footer-logo .logo-icon svg { width: 13px; height: 13px; stroke: white; }
+    .footer-links { display: flex; gap: 1.5rem; }
+    .footer-links a { font-size: 0.82rem; color: var(--text-3); text-decoration: none; transition: color 0.2s; }
+    .footer-links a:hover { color: var(--text-2); }
+    .footer-copy { font-size: 0.78rem; color: var(--text-3); }
+
+    /* ─── REVEAL ANIMATIONS ─── */
+    .reveal {
+      opacity: 0; transform: translateY(24px);
+      transition: opacity 0.7s cubic-bezier(0.16,1,0.3,1),
+                  transform 0.7s cubic-bezier(0.16,1,0.3,1);
+    }
+    .reveal.visible { opacity: 1; transform: none; }
+    .reveal-delay-1 { transition-delay: 0.1s; }
+    .reveal-delay-2 { transition-delay: 0.2s; }
+    .reveal-delay-3 { transition-delay: 0.3s; }
+    .reveal-delay-4 { transition-delay: 0.4s; }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 900px) {
+      .hero-inner { grid-template-columns: 1fr; text-align: center; gap: 3rem; }
+      .hero-sub { max-width: 100%; }
+      .hero-actions { justify-content: center; }
+      .how-grid { grid-template-columns: 1fr 1fr; }
+      .tech-inner { grid-template-columns: 1fr; }
+      .b-wheel, .b-hotkey, .b-persist, .b-paste, .b-light { grid-column: span 12; }
+      nav { padding: 0 1.25rem; }
+      .nav-links { display: none; }
+      .roadmap-timeline { grid-template-columns: 1fr; }
+      .footer-inner { flex-direction: column; align-items: flex-start; }
+    }
+    @media (max-width: 600px) {
+      .how-grid { grid-template-columns: 1fr; }
+      .spec-grid { grid-template-columns: 1fr 1fr; }
+      .stats-bar { flex-wrap: wrap; }
+      .stat-item { border-right: none; border-bottom: 1px solid var(--border); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─── NAV ─── -->
+<nav>
+  <a href="#" class="nav-logo">
+    <div class="logo-icon">
+      <svg fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+    </div>
+    ClipWheel
+  </a>
+  <ul class="nav-links">
+    <li><a href="#features">功能</a></li>
+    <li><a href="#how">使用方式</a></li>
+    <li><a href="#roadmap">路线图</a></li>
+    <li><a href="#download" class="nav-cta">免费下载</a></li>
+  </ul>
+</nav>
+
+<!-- ─── HERO ─── -->
+<section class="hero">
+  <div class="hero-blob hero-blob-1"></div>
+  <div class="hero-blob hero-blob-2"></div>
+  <div class="hero-inner">
+    <div class="hero-text">
+      <div class="hero-badge reveal">V 2.2 现已发布</div>
+      <h1 class="hero-title reveal reveal-delay-1">
+        极速粘贴，<br>
+        <span class="line2">指尖流转。</span>
+      </h1>
+      <p class="hero-sub reveal reveal-delay-2">
+        ClipWheel 以径向轮盘重新定义 Windows 剪贴板交互——<br>
+        松开热键，内容即达，无感、无缝、无停顿。
+      </p>
+      <div class="hero-actions reveal reveal-delay-3">
+        <a href="#download" class="btn-primary-lg">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          立即下载
+        </a>
+        <a href="#features" class="btn-ghost-lg">
+          了解更多
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+      </div>
+    </div>
+
+    <!-- Wheel Visual -->
+    <div class="hero-visual reveal reveal-delay-2">
+      <div class="wheel-wrap" id="wheelWrap">
+        <!-- Glow halo -->
+        <div class="wheel-glow"></div>
+
+        <!-- ONLY this SVG rotates — no children inside it -->
+        <svg class="wheel-svg-ring" viewBox="0 0 340 340" xmlns="http://www.w3.org/2000/svg">
+          <!-- Concentric guide rings -->
+          <circle cx="170" cy="170" r="155" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+          <circle cx="170" cy="170" r="115" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+          <!-- 4 coloured sectors (evenly spaced, small gap via stroke-dasharray on dividers) -->
+          <path d="M170,170 L170,16 A154,154 0 0,1 303,247 Z"  fill="rgba(79,158,255,0.07)"  stroke="rgba(79,158,255,0.18)"  stroke-width="0.6"/>
+          <path d="M170,170 L303,247 A154,154 0 0,1 37,247 Z"  fill="rgba(167,139,250,0.05)" stroke="rgba(167,139,250,0.12)" stroke-width="0.6"/>
+          <path d="M170,170 L37,247  A154,154 0 0,1 37,93 Z"   fill="rgba(255,179,64,0.05)"  stroke="rgba(255,179,64,0.12)"  stroke-width="0.6"/>
+          <path d="M170,170 L37,93   A154,154 0 0,1 170,16 Z"  fill="rgba(48,209,88,0.05)"   stroke="rgba(48,209,88,0.12)"   stroke-width="0.6"/>
+          <!-- Divider spokes -->
+          <g stroke="rgba(255,255,255,0.06)" stroke-width="1">
+            <line x1="170" y1="55" x2="170" y2="170"/>
+            <line x1="285" y1="247" x2="170" y2="170"/>
+            <line x1="55"  y1="247" x2="170" y2="170"/>
+            <line x1="55"  y1="93"  x2="170" y2="170"/>
+          </g>
+          <!-- Tick marks on outer ring -->
+          <g stroke="rgba(255,255,255,0.1)" stroke-width="1.2">
+            <line x1="170" y1="12"  x2="170" y2="24"/>
+            <line x1="170" y1="316" x2="170" y2="328"/>
+            <line x1="12"  y1="170" x2="24"  y2="170"/>
+            <line x1="316" y1="170" x2="328" y2="170"/>
+          </g>
+          <!-- Pulsing active dot at top of ring -->
+          <circle cx="170" cy="18" r="5" fill="var(--accent)">
+            <animate attributeName="opacity" values="1;0.25;1" dur="2s" repeatCount="indefinite"/>
+            <animate attributeName="r"       values="5;6.5;5"  dur="2s" repeatCount="indefinite"/>
+          </circle>
+        </svg>
+
+        <!-- Hub: centered via margin, no transform/animation conflict -->
+        <div class="wheel-hub">
+          <span class="wheel-hub-logo">CW</span>
+        </div>
+
+        <!-- Item cards: positioned by JS rAF — transform only does centering -->
+        <div class="wheel-item active" id="wi0">
+          <span class="tag">历史 1</span>git commit -m "fix: …"
+        </div>
+        <div class="wheel-item" id="wi1">
+          <span class="tag">历史 2</span>console.log(data)
+        </div>
+        <div class="wheel-item" id="wi2">
+          <span class="tag">固定</span>Meeting at 3PM →
+        </div>
+        <div class="wheel-item" id="wi3">
+          <span class="tag">历史 3</span>https://figma.com/…
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── STATS BAR ─── -->
+<div class="stats-bar">
+  <div class="stat-item reveal">
+    <div class="stat-num">&lt;<span>1</span>ms</div>
+    <div class="stat-label">热键响应延迟</div>
+  </div>
+  <div class="stat-item reveal reveal-delay-1">
+    <div class="stat-num">&lt;<span>3</span>MB</div>
+    <div class="stat-label">内存占用上限</div>
+  </div>
+  <div class="stat-item reveal reveal-delay-2">
+    <div class="stat-num">60fps</div>
+    <div class="stat-label">流畅交互帧率</div>
+  </div>
+  <div class="stat-item reveal reveal-delay-3">
+    <div class="stat-num">100<span>%</span></div>
+    <div class="stat-label">原生 C + Win32</div>
+  </div>
+</div>
+
+<!-- ─── FEATURES ─── -->
+<section class="content" id="features">
+  <div class="container">
+    <div class="reveal">
+      <div class="eyebrow">核心功能</div>
+      <h2 class="section-title">为速度而生，<br>为直觉而设计。</h2>
+      <p class="section-sub">每一个交互细节都经过深思熟虑，从径向轮盘到控制中心，ClipWheel 让你与剪贴板之间只剩一个动作。</p>
+    </div>
+
+    <div class="bento">
+      <!-- Big card: Wheel -->
+      <div class="bento-card b-wheel card-blue reveal">
+        <div class="card-icon">
+          <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/><path d="M2 12h20"/><path d="M12 2c2.76 0 5 4.48 5 10s-2.24 10-5 10"/></svg>
+        </div>
+        <h3>径向轮盘</h3>
+        <p>热键一按，轮盘即刻在鼠标处弹出。通过方向感知精准选取历史片段，松开热键即自动粘贴——完全不需要眼睛看屏幕。</p>
+        <div class="mini-wheel-demo" aria-hidden="true">
+          <div class="mini-ring">
+            <svg class="mini-svg" viewBox="0 0 140 140">
+              <circle cx="70" cy="70" r="60" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+              <path d="M70,70 L70,12 A58,58 0 0,1 120,99 Z" fill="rgba(79,158,255,0.1)" stroke="rgba(79,158,255,0.3)" stroke-width="1">
+                <animate attributeName="fill" values="rgba(79,158,255,0.1);rgba(79,158,255,0.2);rgba(79,158,255,0.1)" dur="2.5s" repeatCount="indefinite"/>
+              </path>
+              <path d="M70,70 L120,99 A58,58 0 0,1 20,99 Z" fill="rgba(167,139,250,0.06)" stroke="rgba(167,139,250,0.15)" stroke-width="1"/>
+              <path d="M70,70 L20,99 A58,58 0 0,1 20,41 Z" fill="rgba(255,179,64,0.06)" stroke="rgba(255,179,64,0.15)" stroke-width="1"/>
+              <path d="M70,70 L20,41 A58,58 0 0,1 70,12 Z" fill="rgba(48,209,88,0.06)" stroke="rgba(48,209,88,0.15)" stroke-width="1"/>
+              <line x1="70" y1="70" x2="95" y2="41" stroke="rgba(79,158,255,0.3)" stroke-width="0.8" stroke-dasharray="3,4"/>
+              <circle cx="95" cy="41" r="3.5" fill="var(--accent)">
+                <animate attributeName="r" values="3.5;5;3.5" dur="2.5s" repeatCount="indefinite"/>
+              </circle>
+            </svg>
+            <div class="mini-hub"><div class="mini-hub-dot"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hotkey card -->
+      <div class="bento-card b-hotkey card-purple reveal reveal-delay-1">
+        <div class="card-icon">
+          <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M18 12h.01M10 12h4M8 16h8"/></svg>
+        </div>
+        <h3>智能热键系统</h3>
+        <p>任意组合修饰键，在 UI 中点击即录制。无需重启，设置实时生效。</p>
+        <div class="key-combo">
+          <div class="key">Ctrl</div>
+          <span class="key-plus">+</span>
+          <div class="key">Alt</div>
+          <span class="key-plus">+</span>
+          <div class="key accent">~</div>
+          <span class="key-plus" style="margin-left:6px;">→ 召唤轮盘</span>
+        </div>
+      </div>
+
+      <!-- Persist -->
+      <div class="bento-card b-persist card-amber reveal">
+        <div class="card-icon">
+          <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        </div>
+        <h3>本地数据持久化</h3>
+        <p>历史与固定项安全存储于本地，重启电脑后依然完整保留。</p>
+      </div>
+
+      <!-- Auto paste -->
+      <div class="bento-card b-paste card-green reveal reveal-delay-1">
+        <div class="card-icon">
+          <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <h3>松开即粘贴</h3>
+        <p>自动恢复上一个活动窗口，选中即粘贴，过渡无感。</p>
+      </div>
+
+      <!-- Lightweight -->
+      <div class="bento-card b-light card-white reveal reveal-delay-2">
+        <div class="card-icon">
+          <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-5"/></svg>
+        </div>
+        <h3>极致轻量</h3>
+        <p>纯 C + Win32 编写，零依赖，绿色免安装，开机秒启。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── HOW IT WORKS ─── -->
+<section class="content" style="padding-top:0;" id="how">
+  <div class="container">
+    <div class="reveal">
+      <div class="eyebrow">使用流程</div>
+      <h2 class="section-title">四步，一气呵成。</h2>
+    </div>
+    <div class="how-grid reveal reveal-delay-1">
+      <div class="how-step">
+        <div class="step-num">01</div>
+        <div class="step-icon" style="background:rgba(79,158,255,0.1);">
+          <svg fill="none" stroke="var(--accent)" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v20M2 12h20"/></svg>
+        </div>
+        <h4>启动</h4>
+        <p>运行 <code style="background:var(--surface);padding:2px 6px;border-radius:4px;font-size:0.8em;">clipwheel.exe</code>，自动最小化至系统托盘，静默守候。</p>
+      </div>
+      <div class="how-step">
+        <div class="step-num">02</div>
+        <div class="step-icon" style="background:rgba(167,139,250,0.1);">
+          <svg fill="none" stroke="var(--accent-2)" stroke-width="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </div>
+        <h4>复制</h4>
+        <p>在任何应用中正常使用 Ctrl+C，ClipWheel 在后台默默记录一切。</p>
+      </div>
+      <div class="how-step">
+        <div class="step-num">03</div>
+        <div class="step-icon" style="background:rgba(255,179,64,0.1);">
+          <svg fill="none" stroke="var(--amber)" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        </div>
+        <h4>呼出</h4>
+        <p>按住热键（默认 <code style="background:var(--surface);padding:2px 6px;border-radius:4px;font-size:0.8em;">~</code>），轮盘弹出，移动鼠标指向目标片段。</p>
+      </div>
+      <div class="how-step">
+        <div class="step-num">04</div>
+        <div class="step-icon" style="background:rgba(48,209,88,0.1);">
+          <svg fill="none" stroke="var(--green)" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <h4>释放</h4>
+        <p>松开热键，内容瞬间填入光标所在位置，心流不中断。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── TECH ─── -->
+<section class="content tech-section" id="tech">
+  <div class="container">
+    <div class="tech-inner">
+      <div class="reveal">
+        <div class="eyebrow">技术底座</div>
+        <h2 class="section-title" style="font-size:clamp(1.8rem,3vw,2.6rem);">底层逻辑，<br>决定顶层快感。</h2>
+        <p class="section-sub">ClipWheel 直接与 Windows 内核对话，绕开一切中间层，确保每一帧交互都精准、丝滑、毫不妥协。</p>
+        <div class="spec-grid">
+          <div class="spec-card">
+            <div class="val">Native C</div>
+            <div class="lbl">核心引擎</div>
+          </div>
+          <div class="spec-card">
+            <div class="val">&lt;1ms</div>
+            <div class="lbl">热键延迟</div>
+          </div>
+          <div class="spec-card">
+            <div class="val">&lt;3MB</div>
+            <div class="lbl">内存占用</div>
+          </div>
+          <div class="spec-card">
+            <div class="val">Win32</div>
+            <div class="lbl">API 层级</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="reveal reveal-delay-2">
+        <div class="code-window">
+          <div class="code-titlebar">
+            <div class="dot dot-r"></div>
+            <div class="dot dot-y"></div>
+            <div class="dot dot-g"></div>
+            <span style="margin-left:8px;font-size:0.75rem;color:var(--text-3);font-family:monospace;">clipwheel.c</span>
+          </div>
+          <div class="code-body"><pre><span class="c-comment">// 注册全局热键，无缝捕获系统事件</span>
+<span class="c-fn">RegisterHotKey</span>(hwnd, HOTKEY_ID,
+  MOD_CONTROL | MOD_NOREPEAT,
+  VK_OEM_3);  <span class="c-comment">// ~ 键</span>
+
+<span class="c-comment">// 高精度事件循环 — < 1ms 响应</span>
+<span class="c-kw">while</span> (<span class="c-fn">GetMessage</span>(&msg, <span class="c-num">NULL</span>, <span class="c-num">0</span>, <span class="c-num">0</span>)) {
+  <span class="c-kw">if</span> (msg.message == <span class="c-type">WM_HOTKEY</span>) {
+    <span class="c-fn">ShowRadialWheel</span>(cursor_x, cursor_y);
+  }
+  <span class="c-fn">DispatchMessage</span>(&msg);
+}
+
+<span class="c-comment">// 松开热键 → 自动粘贴，体验无缝</span>
+<span class="c-fn">SetForegroundWindow</span>(prev_hwnd);
+<span class="c-fn">SendInput</span>(PASTE_KEYSTROKE);</pre></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── ROADMAP ─── -->
+<section class="content" id="roadmap">
+  <div class="container">
+    <div class="reveal">
+      <div class="eyebrow">产品路线图</div>
+      <h2 class="section-title">进化之路。</h2>
+      <p class="section-sub">ClipWheel 正以稳健的步伐持续演进，每一个版本都专注于真实的用户痛点。</p>
+    </div>
+    <div class="roadmap-timeline">
+      <div class="rm-item reveal">
+        <div class="rm-tag done">已完成</div>
+        <h4>V1.0 — 核心发布</h4>
+        <p>基础环形菜单、剪贴板历史管理与固定项功能，奠定交互范式。</p>
+      </div>
+      <div class="rm-item reveal reveal-delay-1">
+        <div class="rm-tag done">已完成</div>
+        <h4>V2.1 — 稳定化升级</h4>
+        <p>修复轮盘抖动与鬼影、优化鼠标自动回中、提升控制中心整体稳定性与可读性。</p>
+      </div>
+      <div class="rm-item reveal reveal-delay-2">
+        <div class="rm-tag now">进行中</div>
+        <h4>V2.2 — 架构重构与键盘导航</h4>
+        <p>代码模块化拆分、键盘方向键轮盘导航、撤销/自启动/右键菜单、CI/CD 工作流。</p>
+      </div>
+      <div class="rm-item reveal reveal-delay-2">
+        <div class="rm-tag soon">未来规划</div>
+        <h4>V3.0 — 生态联动</h4>
+        <p>云端同步、跨设备管理，以及更丰富的主题自定义系统。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── DOWNLOAD ─── -->
+<section class="dl-section" id="download">
+  <div class="reveal">
+    <div class="eyebrow" style="margin-bottom:1.25rem;">开始使用</div>
+    <h2 class="section-title">准备好了吗？</h2>
+    <p class="section-sub">免费下载，绿色无安装，10 秒内即可体验全新的剪贴板交互。</p>
+    <a href="https://github.com/chenxing0026/ClipWheel-/releases/download/V2.2/ClipWheel-v2.2.0-Windows-x64.zip" class="dl-btn" target="_blank" rel="noopener noreferrer">
+      <svg fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      免费下载 ClipWheel V2.2
+    </a>
+    <p class="dl-note">Windows 10 / 11 (64-bit) · 无需安装 · 约 200KB</p>
+  </div>
+</section>
+
+<!-- ─── FOOTER ─── -->
+<footer>
+  <div class="footer-inner">
+    <a href="#" class="footer-logo">
+      <div class="logo-icon">
+        <svg fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      </div>
+      ClipWheel
+    </a>
+    <div class="footer-links">
+      <a href="#features">功能</a>
+      <a href="#roadmap">路线图</a>
+      <a href="https://github.com/chenyuhao0626/ClipWheel-" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="#">反馈建议</a>
+    </div>
+    <span class="footer-copy">&copy; 2026 ClipWheel Team</span>
+  </div>
+</footer>
+
+<script>
+  // ── Wheel item orbit animation ──────────────────────────────────────────
+  // Items orbit around the center of .wheel-wrap using requestAnimationFrame.
+  // Only top/left are updated — transform stays as `translate(-50%,-50%)`
+  // which simply centres each card on its computed point. No conflict.
+  (function () {
+    const wrap  = document.getElementById('wheelWrap');
+    const items = [
+      document.getElementById('wi0'),
+      document.getElementById('wi1'),
+      document.getElementById('wi2'),
+      document.getElementById('wi3'),
+    ];
+    const RADIUS   = 172;          // px from wrap centre
+    const DURATION = 30000;        // ms per full revolution
+    const TWO_PI   = Math.PI * 2;
+    // Evenly spread starting angles; offset so cards begin in nice positions
+    const baseAngles = items.map((_, i) => (i / items.length) * TWO_PI - Math.PI / 2);
+    let startTs = null;
+
+    function tick(ts) {
+      if (!startTs) startTs = ts;
+      const elapsed = ts - startTs;
+      const progress = (elapsed % DURATION) / DURATION; // 0 → 1
+      const rotation = progress * TWO_PI;               // radians swept so far
+
+      const cx = wrap.offsetWidth  / 2;
+      const cy = wrap.offsetHeight / 2;
+
+      items.forEach((el, i) => {
+        const angle = baseAngles[i] + rotation;
+        const x = cx + RADIUS * Math.cos(angle);
+        const y = cy + RADIUS * Math.sin(angle);
+        el.style.left      = x + 'px';
+        el.style.top       = y + 'px';
+        el.style.transform = 'translate(-50%, -50%)';
+      });
+
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  })();
+
+  // ── Intersection Observer for reveal animations ──────────────────────────
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  // Nav background on scroll
+  const nav = document.querySelector('nav');
+  window.addEventListener('scroll', () => {
+    nav.style.background = window.scrollY > 20
+      ? 'rgba(6,6,8,0.95)'
+      : 'rgba(6,6,8,0.72)';
+  }, { passive: true });
+
+  // Wheel sector hover highlight (desktop)
+  document.querySelectorAll('.how-step').forEach(step => {
+    step.addEventListener('mouseenter', () => {
+      step.style.background = 'rgba(255,255,255,0.03)';
+    });
+    step.addEventListener('mouseleave', () => {
+      step.style.background = '';
+    });
+  });
+</script>
+</body>
+</html>

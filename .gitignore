@@ -1,0 +1,28 @@
+# Build outputs
+*.exe
+*.obj
+*.res
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.iobj
+*.ipdb
+*.zip
+build_out.txt
+
+# Distribution
+dist/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# OS junk
+Thumbs.db
+Desktop.ini
+
+# Local overrides
+# clipwheel.ini

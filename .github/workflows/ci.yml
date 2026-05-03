@@ -1,0 +1,24 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        shell: cmd
+        run: build.bat
+
+      - name: Self-test
+        run: .\clipwheel.exe --selftest-noui
+
+      - name: Smoke-test
+        shell: cmd
+        run: scripts\smoke-test.bat

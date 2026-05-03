@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ClipWheel
+Comment=Radial clipboard manager
+Exec=clipwheel
+Icon=clipwheel
+Terminal=false
+Categories=Utility;Productivity;
