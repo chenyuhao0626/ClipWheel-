@@ -53,7 +53,7 @@ clipwheel/
 │   ├── smoke-test.bat            #   冒烟测试（启动/验证/退出）
 │   └── package-release.ps1       #   打包发行版
 │
-├── website/              # 项目介绍网站（HTML, 可用于 GitHub Pages）
+├── docs/              # 项目介绍网站（HTML, 可用于 GitHub Pages）
 │   └── index.html
 │
 ├── dist/                 # 分发包输出目录
@@ -103,11 +103,11 @@ python scripts\generate-brand-assets.py
 
 ## 项目网站
 网站入口：
-- [website/index.html](website/index.html)
+- [docs/index.html](docs/index.html)
 
 本地预览（任选其一）：
-1. 直接双击打开 `website/index.html`
-2. 用静态服务器启动目录 `website/`（推荐）
+1. 直接双击打开 `docs/index.html`
+2. 用静态服务器启动目录 `docs/`（推荐）
 
 ## 使用技巧
 
