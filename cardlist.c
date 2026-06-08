@@ -165,14 +165,15 @@ void paint_card_list(HWND hwnd) {
 
             /* Draw edit icon for pin items */
             if (state->kind == CARD_KIND_PIN) {
-                int icon_x = card.right - 32;
-                int icon_y = card.top + (card_h - 20) / 2;
+                int icon_size = DPISC(28);
+                int icon_x = card.right - DPISC(40);
+                int icon_y = card.top + (card_h - icon_size) / 2;
                 int icon_hot = (g_rename_pin_index == data_index);
                 COLORREF icon_col = icon_hot ? TC_ACCENT_HOVER : TC_TEXT_TERTIARY;
                 /* Pen icon: simple "✎" character */
-                SelectObject(hdc, g_font_caption);
+                SelectObject(hdc, g_font_body_bold);
                 SetTextColor(hdc, icon_col);
-                RECT icon_rc = {icon_x, icon_y, icon_x + 20, icon_y + 20};
+                RECT icon_rc = {icon_x, icon_y, icon_x + icon_size, icon_y + icon_size};
                 DrawTextW(hdc, L"\u270e", -1, &icon_rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
             }
 

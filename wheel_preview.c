@@ -2,13 +2,13 @@
 #include "draw_utils.h"
 
 static const COLORREF kPreviewPal[NSECT] = {
-    RGB(99,145,255), RGB(139,110,255), RGB(168,130,255), RGB(80,200,210),
-    RGB(75,175,255), RGB(115,145,255), RGB(130,100,245), RGB(90,210,170)
+    RGB(148,163,184), RGB(196,167,144), RGB(134,183,152), RGB(176,162,198),
+    RGB(211,135,135), RGB(128,184,184), RGB(204,186,132), RGB(200,152,176)
 };
 
 static const COLORREF kPreviewPalLight[NSECT] = {
-    RGB(204, 120, 92),  RGB(210, 150, 100), RGB(160, 140, 110), RGB(100, 160, 140),
-    RGB(120, 140, 170), RGB(180, 130, 140), RGB(140, 120, 160), RGB(90, 155, 140)
+    RGB(99, 130, 180),  RGB(200, 130, 90),  RGB(60, 160, 120),  RGB(150, 110, 190),
+    RGB(210, 100, 100), RGB(60, 160, 160),  RGB(200, 160, 60),  RGB(200, 110, 150)
 };
 
 void preview_calc_radii(int w, int h) {

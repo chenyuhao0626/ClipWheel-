@@ -45,7 +45,8 @@ POINT g_original_cursor_pos;
 POINT g_wheel_center_screen;
 int g_overlay_vx;
 int g_overlay_vy;
-float g_wheel_appear = 1.0f;
+float g_fan_phase = 1.0f;
+float g_fan_open[NSECT];
 float g_sector_heat[CW_MAX_SLOT];
 float g_main_phase = 0.0f;
 HCURSOR g_blank_cursor = NULL;
@@ -320,21 +321,33 @@ void apply_selection_to_target(void) {
 
 static const double WHEEL_PI = 3.14159265358979323846;
 
+/* Bloom animation timing (milliseconds). */
+#define BLOOM_HUB      0.0f
+#define BLOOM_GAP     30.0f
+#define BLOOM_GROW   510.0f
+#define BLOOM_TOTAL  (BLOOM_HUB + 7.0f * BLOOM_GAP + BLOOM_GROW)
+
 /* Rich, saturated sector palette - vibrant but harmonious */
 static const COLORREF kSectorPalette[NSECT] = {
-    RGB(99, 145, 255),   /* 0: Blue */
-    RGB(139, 110, 255),  /* 1: Violet */
-    RGB(168, 130, 255),  /* 2: Lavender */
-    RGB(80, 200, 210),   /* 3: Cyan */
-    RGB(75, 175, 255),   /* 4: Cancel (blue) */
-    RGB(115, 145, 255),  /* 5: Periwinkle */
-    RGB(130, 100, 245),  /* 6: Purple */
-    RGB(90, 210, 170)    /* 7: Teal */
+    RGB(148, 163, 184),  /* 0: Slate-blue    */
+    RGB(196, 167, 144),  /* 1: Warm-sand     */
+    RGB(134, 183, 152),  /* 2: Sage          */
+    RGB(176, 162, 198),  /* 3: Muted-lavender*/
+    RGB(211, 135, 135),  /* 4: Dusty-rose    */
+    RGB(128, 184, 184),  /* 5: Soft-teal     */
+    RGB(204, 186, 132),  /* 6: Champagne-gold*/
+    RGB(200, 152, 176)   /* 7: Mauve         */
 };
 
 static const COLORREF kSectorPaletteLight[NSECT] = {
-    RGB(204, 120, 92),  RGB(210, 150, 100), RGB(160, 140, 110), RGB(100, 160, 140),
-    RGB(120, 140, 170), RGB(180, 130, 140), RGB(140, 120, 160), RGB(90, 155, 140)
+    RGB(99,  130, 180),  /* 0: Steel-blue    */
+    RGB(200, 130,  90),  /* 1: Copper        */
+    RGB(60,  160, 120),  /* 2: Forest        */
+    RGB(150, 110, 190),  /* 3: Soft-purple   */
+    RGB(210, 100, 100),  /* 4: Soft-red      */
+    RGB(60,  160, 160),  /* 5: Sea-teal      */
+    RGB(200, 160,  60),  /* 6: Honey         */
+    RGB(200, 110, 150)   /* 7: Dusty-pink    */
 };
 
 static void wheel_origin(HDC hdc, int w, int h, int *cx, int *cy) {
@@ -380,12 +393,6 @@ static void draw_glow_rings(HDC hdc, int cx, int cy, int outer_r) {
     RestoreDC(hdc, s1);
 }
 
-static void draw_wheel_base(HDC hdc, int cx, int cy, int outer_r) {
-    RECT wr = {cx - outer_r, cy - outer_r, cx + outer_r, cy + outer_r};
-    fill_round_gradient(hdc, &wr, TC_WHEEL_SECTOR, TC_WHEEL_BG, outer_r);
-    draw_round_border(hdc, &wr, mix_color(TC_WHEEL_BORDER, TC_ACCENT_HOVER, 0.30f), outer_r, 2);
-}
-
 static void draw_wheel_sectors(HDC hdc, int cx, int cy, int outer_r, double step) {
     int s2 = SaveDC(hdc);
     SelectClipRgn(hdc, NULL);
@@ -407,23 +414,40 @@ static void draw_wheel_sectors(HDC hdc, int cx, int cy, int outer_r, double step
             ? mix_color(TC_CANCEL_BORDER_A, TC_CANCEL_BORDER_B, heat * 0.80f)
             : mix_color(TC_WHEEL_BORDER, TC_ACCENT_GLOW, heat * 0.70f);
 
-        HBRUSH br = CreateSolidBrush(fill);
-        HPEN pen = CreatePen(PS_SOLID, (active || i == 4) ? 1 : 0, border);
-        HGDIOBJ obr = SelectObject(hdc, br);
-        HGDIOBJ opn = SelectObject(hdc, pen);
-        double t0 = -WHEEL_PI / 2.0 + i * step - step / 2.0;
-        double t1 = t0 + step;
-        Pie(hdc, cx - outer_r, cy - outer_r, cx + outer_r, cy + outer_r,
-            cx + (int)(outer_r * cos(t0)), cy - (int)(outer_r * sin(t0)),
-            cx + (int)(outer_r * cos(t1)), cy - (int)(outer_r * sin(t1)));
-        SelectObject(hdc, obr); SelectObject(hdc, opn);
-        DeleteObject(br); DeleteObject(pen);
+        HBRUSH br;
+        HPEN pen;
+        HGDIOBJ obr;
+        HGDIOBJ opn;
+            /* Bloom: sector grows radially AND sweeps clockwise from cancel */
+            {
+                double t0, t1;
+                float  open     = ease_out_cubicf(g_fan_open[i]);
+                int    cw_clock = (4 - i + NSECT) % NSECT;
+                double anchor   = -WHEEL_PI / 2.0 + 4.0 * step;
+                double mid      = anchor - (double)cw_clock * step * open;
+                int    p        = DPISC(INNER_R) + (int)((outer_r - DPISC(INNER_R)) * open);
+                if (p < DPISC(INNER_R) + 1) continue;
+                t0 = mid - step / 2.0;
+                t1 = mid + step / 2.0;
+                br  = CreateSolidBrush(fill);
+                pen = CreatePen(PS_SOLID, 1, border);
+                obr = SelectObject(hdc, br);
+                opn = SelectObject(hdc, pen);
+                Pie(hdc, cx - p, cy - p, cx + p, cy + p,
+                    cx + (int)(p * cos(t0)), cy - (int)(p * sin(t0)),
+                    cx + (int)(p * cos(t1)), cy - (int)(p * sin(t1)));
+                SelectObject(hdc, obr); SelectObject(hdc, opn);
+                DeleteObject(br); DeleteObject(pen);
+                continue;
+            }
     }
     /* Draw sector divider lines for better visual separation */
     {
-        HPEN div = CreatePen(PS_SOLID, 1, mix_color(TC_BORDER_DEFAULT, TC_BG_DEEP, 0.5f));
+    if (g_fan_phase >= 1.0f) {
+        int i;
+        HPEN div = CreatePen(PS_SOLID, 1, TC_BG_CARD);
         HGDIOBJ op = SelectObject(hdc, div);
-        for (int i = 0; i < NSECT; ++i) {
+        for (i = 0; i < NSECT; ++i) {
             double angle = -WHEEL_PI / 2.0 + i * step - step / 2.0;
             int x1 = cx + (int)(INNER_R * cos(angle));
             int y1 = cy - (int)(INNER_R * sin(angle));
@@ -433,6 +457,7 @@ static void draw_wheel_sectors(HDC hdc, int cx, int cy, int outer_r, double step
             LineTo(hdc, x2, y2);
         }
         SelectObject(hdc, op); DeleteObject(div);
+    }
     }
     RestoreDC(hdc, s2);
 }
@@ -457,7 +482,7 @@ static void draw_wheel_hub(HDC hdc, int cx, int cy, int inner_r, float appear, f
     draw_round_border(hdc, &ccard, mix_color(TC_ACCENT, TC_ACCENT_GLOW, 0.40f), RADIUS_2XL, 1);
 
     SelectObject(hdc, g_font_body);
-    SetTextColor(hdc, mix_color(TC_TEXT_SECONDARY, TC_TEXT_PRIMARY, 0.35f + 0.65f * t_text));
+    SetTextColor(hdc, mix_color(TC_BG_DEEP, TC_TEXT_PRIMARY, t_text));
     if (g_sel == 4) {
         SetTextColor(hdc, TC_DANGER);
         DrawTextW(hdc, L"\u677e\u5f00\u53d6\u6d88", -1, &ccard, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
@@ -466,8 +491,19 @@ static void draw_wheel_hub(HDC hdc, int cx, int cy, int inner_r, float appear, f
         if (g_slot_count == 0) {
             DrawTextW(hdc, L"\u8fd8\u6ca1\u6709\u53ef\u7528\u5185\u5bb9", -1, &ccard, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         } else if (sel_slot >= 0 && sel_slot < g_slot_count) {
+            /* Show pinned display name, or raw slot text, or latest history */
             wchar_t preview[64];
-            truncate_preview(preview, ARRAYSIZE(preview), g_slots[sel_slot], 88);
+            if (g_slot_display[sel_slot][0]) {
+                truncate_preview(preview, ARRAYSIZE(preview), g_slot_display[sel_slot], 88);
+            } else if (g_slots[sel_slot][0]) {
+                truncate_preview(preview, ARRAYSIZE(preview), g_slots[sel_slot], 88);
+            } else {
+                wchar_t hist[CW_MAX_CHARS];
+                if (cw_history_copy_history(0, hist, ARRAYSIZE(hist)))
+                    truncate_preview(preview, ARRAYSIZE(preview), hist, 88);
+                else
+                    wcsncpy_s(preview, ARRAYSIZE(preview), L"无历史记录", _TRUNCATE);
+            }
             DrawTextW(hdc, preview, -1, &ccard, DT_CENTER | DT_VCENTER | DT_WORDBREAK | DT_NOPREFIX);
         } else {
             DrawTextW(hdc, L"\u79fb\u52a8\u9f20\u6807\u63a7\u5236\u65b9\u5411\u7403\uff0c\u677e\u5f00\u70ed\u952e\u7c98\u8d34", -1, &ccard, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
@@ -482,7 +518,14 @@ static void draw_wheel_labels(HDC hdc, int cx, int cy, int outer_r, int inner_r,
     SelectObject(hdc, g_font_body);
     for (int i = 0; i < NSECT; ++i) {
         int slot = sector_to_slot(i);
-        double mid = -WHEEL_PI / 2.0 + i * step;
+        double mid;
+        /* Label follows same rotate+grow animation as its sector */
+        {
+            float  open_l   = ease_out_cubicf(g_fan_open[i]);
+            int    cw_clock_l = (4 - i + NSECT) % NSECT;
+            double anchor_l = -WHEEL_PI / 2.0 + 4.0 * step;
+            mid = anchor_l - (double)cw_clock_l * step * open_l;
+        }
         /* Labels sit between inner hub and outer edge */
         int label_r = (inner_r + outer_r) / 2 + 10;
         int mx = cx + (int)(label_r * cos(mid));
@@ -505,7 +548,10 @@ static void draw_wheel_labels(HDC hdc, int cx, int cy, int outer_r, int inner_r,
             DrawTextW(hdc, L"\u2715 \u53d6\u6d88", -1, &lr, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
         } else if (slot >= 0 && slot < g_slot_count) {
             wchar_t prev[64];
-            truncate_preview(prev, ARRAYSIZE(prev), g_slot_display[slot], 22);
+            if (g_slot_display[slot][0])
+                truncate_preview(prev, ARRAYSIZE(prev), g_slot_display[slot], 22);
+            else
+                truncate_preview(prev, ARRAYSIZE(prev), g_slots[slot], 22);
 
             /* Dark pill background for ALL labels - improves readability */
             RECT pill = {mx - 68, my - 13, mx + 68, my + 13};
@@ -640,21 +686,22 @@ static void draw_ball(HDC hdc, int cx, int cy, int outer_r) {
 
 void draw_wheel(HDC hdc, int w, int h) {
     int cx, cy, outer_r, inner_r, old_mode;
-    float appear = ease_out_backf(g_wheel_appear);
-    float t_text = ease_out_cubicf(g_wheel_appear);
-    double step = 2.0 * WHEEL_PI / (double)NSECT;
+    float phase   = g_fan_phase;
+    float hp      = g_fan_open[4];
+    if (hp > 1.0f) hp = 1.0f;
+    float appear  = ease_out_backf(hp);
+    float t_text  = ease_out_cubicf(hp);
+    double step   = 2.0 * WHEEL_PI / (double)NSECT;
 
     wheel_origin(hdc, w, h, &cx, &cy);
     outer_r = (int)(DPISC(OUTER_R) * (0.6f + 0.4f * appear));
-    inner_r = (int)(DPISC(INNER_R) * (0.6f + 0.4f * appear));
+    inner_r = (int)(DPISC(INNER_R) * (0.5f + 0.5f * appear));
 
     old_mode = SetBkMode(hdc, TRANSPARENT);
-    draw_glow_rings(hdc, cx, cy, outer_r);
-    draw_wheel_base(hdc, cx, cy, outer_r);
     draw_wheel_sectors(hdc, cx, cy, outer_r, step);
     draw_wheel_hub(hdc, cx, cy, inner_r, appear, t_text);
     draw_wheel_labels(hdc, cx, cy, outer_r, inner_r, step, t_text);
-    draw_ball(hdc, cx, cy, outer_r);
+    if (g_fan_open[4] >= 0.5f) draw_ball(hdc, cx, cy, outer_r);
     SetBkMode(hdc, old_mode);
 }
 
@@ -696,7 +743,8 @@ void show_wheel(void) {
     build_slots();
     g_wheel_visible = 1;
     g_sel = -1;
-    g_wheel_appear = 0.0f;
+    g_fan_phase = 0.0f;
+    ZeroMemory(g_fan_open, sizeof(g_fan_open));
     ZeroMemory(g_sector_heat, sizeof(g_sector_heat));
     vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
     vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
@@ -805,7 +853,7 @@ void hide_wheel_commit(void) {
     if (!g_wheel_visible) return;
     if (g_sel == SEL_CANCEL_ZONE) { hide_wheel_cancel(); return; }
     g_wheel_visible = 0;
-    g_wheel_appear = 1.0f;
+    g_fan_phase = 1.0f;
     g_cancel_heat = 0.0f;
     g_ball_active = 0;
     g_ball_x = 0.0f; g_ball_y = 0.0f;
@@ -821,7 +869,7 @@ void hide_wheel_commit(void) {
 void hide_wheel_cancel(void) {
     if (!g_wheel_visible) return;
     g_wheel_visible = 0;
-    g_wheel_appear = 1.0f;
+    g_fan_phase = 1.0f;
     g_cancel_heat = 0.0f;
     g_sel = -1;
     g_ball_active = 0;
@@ -1662,14 +1710,26 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                   float prev_ch = g_cancel_heat;
                   g_cancel_heat += (ct - g_cancel_heat) * 0.22f;
                   if (fabs(g_cancel_heat - prev_ch) > 0.005f) need_repaint = 1; }
-                if (g_wheel_appear < 1.0f) {
-                    g_wheel_appear += 0.05f;
-                    if (g_wheel_appear > 1.0f) g_wheel_appear = 1.0f;
+                if (g_fan_phase < 1.0f) {
+                    g_fan_phase += 16.0f / BLOOM_TOTAL;
+                    if (g_fan_phase > 1.0f) g_fan_phase = 1.0f;
+                    for (i = 0; i < NSECT; ++i) {
+                        int   cw_clock = (4 - i + NSECT) % NSECT;
+                        float start    = (BLOOM_HUB + cw_clock * BLOOM_GAP) / BLOOM_TOTAL;
+                        float raw      = (g_fan_phase - start) * BLOOM_TOTAL / BLOOM_GROW;
+                        if (raw < 0.0f) raw = 0.0f;
+                        if (raw > 1.0f) raw = 1.0f;
+                        g_fan_open[i] = raw;
+                    }
                     need_repaint = 1;
-                    SetLayeredWindowAttributes(hwnd, g_floating_mode ? OVERLAY_KEY_COLOR : 0,
-                        (BYTE)((g_floating_mode ? 255.0f : (g_theme == THEME_LIGHT ? 252.0f : 242.0f)) * ease_out_cubicf(g_wheel_appear)),
-                        g_floating_mode ? (LWA_ALPHA | LWA_COLORKEY) : LWA_ALPHA);
-                    alpha_changed = 1;
+                    {
+                        BYTE a = (BYTE)((g_floating_mode ? 255.0f
+                                        : (g_theme == THEME_LIGHT ? 252.0f : 242.0f))
+                                        * ease_out_cubicf(g_fan_open[4]));
+                        SetLayeredWindowAttributes(hwnd, g_floating_mode ? OVERLAY_KEY_COLOR : 0, a,
+                            g_floating_mode ? (LWA_ALPHA | LWA_COLORKEY) : LWA_ALPHA);
+                        alpha_changed = 1;
+                    }
                 }
                 for (i = 0; i < NSECT; ++i) {
                     float target = (i == g_sel) ? 1.0f : 0.0f;
@@ -1750,9 +1810,15 @@ void card_list_start_rename(HWND parent, int pin_index, int card_y) {
     cw_history_pin_display(pin_index, cur, ARRAYSIZE(cur));
     RECT prc;
     GetClientRect(parent, &prc);
-    int left = 30, right = prc.right - 44;
-    int top = card_y + 38, h = 24;
-    SetWindowPos(g_rename_edit, HWND_TOP, left, top, right - left, h, SWP_SHOWWINDOW);
+    POINT tl = {DPISC(30), card_y + DPISC(14)};
+    ClientToScreen(parent, &tl);
+    ScreenToClient(g_main_hwnd, &tl);
+    int width = prc.right - DPISC(48);
+    int h     = DPISC(26);
+    SetWindowPos(g_rename_edit, HWND_TOP, tl.x, tl.y, width, h,
+                 SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    SetWindowPos(g_rename_edit, HWND_TOP, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE);
     SetWindowTextW(g_rename_edit, cur);
     SendMessageW(g_rename_edit, EM_SETSEL, 0, -1);
     SetFocus(g_rename_edit);
